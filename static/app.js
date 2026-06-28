@@ -325,7 +325,7 @@ function updateSlowTiles(p) {
   if (descEl) descEl.textContent = s.state_description || "";
 
   const hfEl = document.getElementById(`hf-val-${p}`);
-  if (hfEl) hfEl.textContent = s.hf !== null ? Math.round(s.hf).toLocaleString() : "—";
+  if (hfEl) hfEl.textContent = s.hf !== null ? Math.round(s.hf * 1e4) : "—";
 
   const rrEl = document.getElementById(`resp-val-${p}`);
   if (rrEl) rrEl.textContent = s.resp_rate !== null ? s.resp_rate.toFixed(1) : "—";

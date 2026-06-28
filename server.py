@@ -165,6 +165,9 @@ class BiofeedbackServer:
     async def mode_b_handler(self, request: web.Request) -> web.FileResponse:
         return web.FileResponse(STATIC_DIR / "mode_b.html", headers=self._NO_CACHE)
 
+    async def whitepaper_handler(self, request: web.Request) -> web.FileResponse:
+        return web.FileResponse(Path(__file__).parent / "whitepaper.html", headers=self._NO_CACHE)
+
     async def static_handler(self, request: web.Request) -> web.FileResponse:
         filename = request.match_info["filename"]
         path = STATIC_DIR / filename
@@ -208,6 +211,7 @@ class BiofeedbackServer:
         app.router.add_get("/ws", self.ws_handler)
         app.router.add_get("/", self.index_handler)
         app.router.add_get("/mode_b", self.mode_b_handler)
+        app.router.add_get("/whitepaper", self.whitepaper_handler)
         app.router.add_get("/static/{filename}", self.static_handler)
         return app
 

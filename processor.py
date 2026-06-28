@@ -96,7 +96,7 @@ def activation_state(
 
 def describe_state(name: str, s: dict, metrics: dict, baseline: Baseline) -> str:
     """
-    One-sentence body-state description per spec §4.7.
+    Multi-sentence body-state description per spec §4.7.
     Describes only body facts — no emotion words, no causal claims.
     """
     level = ("low" if s["activation"] < 35 else
@@ -105,21 +105,43 @@ def describe_state(name: str, s: dict, metrics: dict, baseline: Baseline) -> str
     if np.isfinite(resp):
         breath = (f"slow ({resp:.0f}/min)" if resp < 10
                   else f"rapid ({resp:.0f}/min)" if resp > 20
-                  else "steady")
+                  else f"steady ({resp:.0f}/min)")
     else:
         breath = "steady"
-    hedge = "" if s["confidence"] > 0.7 else " (signals mixed — read with care)"
+    hedge = " (signals mixed)" if s["confidence"] <= 0.7 else ""
 
-    desc = f"{name}: {level} physiological activation, {s['direction']}."
+    base_hr = baseline.stats["mean_hr"][0]
+    hr = metrics.get("mean_hr", base_hr)
+    hr_pct = round(100.0 * (hr - base_hr) / base_hr)
+
+    parts = [f"{level} activation, {s['direction']}{hedge}."]
+
     if s["flooded"]:
-        desc += " Heart rate is past the flooding threshold; a break is indicated."
+        parts.append(
+            f"Heart rate {hr:.0f} bpm — past flooding threshold. A break is indicated.")
+    elif abs(hr_pct) <= 5:
+        parts.append(f"Heart rate {hr:.0f} bpm — near baseline.")
     else:
-        base_hr = baseline.stats["mean_hr"][0]
-        desc += (f" Heart rate {'above' if metrics.get('mean_hr', 0) > base_hr else 'near'}"
-                 f" baseline, breathing {breath}.")
-    if not s["flooded"] and metrics.get("coherence", 0) > 0.6:
-        desc += " Heart rhythm is organized — physiologically settled."
-    return desc + hedge
+        word = "above" if hr_pct > 0 else "below"
+        parts.append(f"Heart rate {hr:.0f} bpm — {abs(hr_pct)}% {word} baseline.")
+
+    parts.append(f"Breathing {breath}.")
+
+    if "rmssd" in baseline.stats:
+        rmssd = metrics.get("rmssd", baseline.stats["rmssd"][0])
+        rz = baseline.z("rmssd", rmssd)
+        if rz < -1.0:
+            parts.append("Heart rhythm variability reduced — vagal tone withdrawn.")
+        elif rz > 1.0:
+            parts.append("Heart rhythm variability elevated — parasympathetic active.")
+
+    coh = metrics.get("coherence", 0.0)
+    if coh > 0.6:
+        parts.append("Heart rhythm organized — physiologically settled.")
+    elif coh < 0.15 and s["activation"] > 50:
+        parts.append("Heart rhythm disorganized.")
+
+    return " ".join(parts)
 
 
 class PartnerProcessor:
@@ -144,13 +166,18 @@ class PartnerProcessor:
         # fast-tier queue: pending mean_hr values computed per beat
         self._fast_queue: list[float] = []
 
-        # sparkline: last 60 s of mean-HR samples (one per beat)
+        # HR trace: last 60 s of mean-HR samples (one per beat) — used by dyadic panel
         self._trace_hr: list[float] = []
         self._trace_t:  list[float] = []  # relative seconds since session start
+
+        # activation trace: last 10 min of slow-tier activation scores
+        self._trace_act:   list[float] = []
+        self._trace_act_t: list[float] = []
 
         self.baseline: Baseline | None = None
         self._prev_activation: float | None = None
         self._session_start = time.monotonic()
+        self._calm_start_ts: float | None = None
 
     # ── ingest ────────────────────────────────────────────────────────────────
 
@@ -216,7 +243,8 @@ class PartnerProcessor:
             self._last_mid = now
             rr = self._rr_within(now, MID_WIN_S)
             if len(rr) >= 5:
-                rr_clean, _ = clean_rr(rr)
+                rr_clean, mask = clean_rr(rr)
+                signal_quality = round(float(mask.mean()), 3) if len(mask) else None
                 if len(rr_clean) >= 5:
                     td = time_domain(rr_clean)
                     mean_hr = td["mean_hr"]
@@ -242,6 +270,7 @@ class PartnerProcessor:
                         "flooded": flooded,
                         "dpa": dpa,
                         "hr_baseline_pct": hr_baseline_pct,
+                        "signal_quality": signal_quality,
                         "trace_hr": [round(v, 1) for v in self._trace_hr],
                         "trace_times": [round(v, 2) for v in self._trace_t],
                     })
@@ -274,8 +303,25 @@ class PartnerProcessor:
                             self._prev_activation = s["activation"]
                             state_desc = describe_state(self.name, s, m, self.baseline)
                             act_result = s
+                            # append to 10-min rolling activation trace
+                            rel_t = now - self._session_start
+                            self._trace_act.append(s["activation"])
+                            self._trace_act_t.append(rel_t)
+                            cutoff_act = rel_t - 600.0
+                            while self._trace_act_t and self._trace_act_t[0] < cutoff_act:
+                                self._trace_act_t.pop(0)
+                                self._trace_act.pop(0)
                         except Exception:
                             pass
+
+                    # calm-zone tracking
+                    calm_zone_s = 0
+                    if act_result and act_result["activation"] < 35:
+                        if self._calm_start_ts is None:
+                            self._calm_start_ts = now
+                        calm_zone_s = int(now - self._calm_start_ts)
+                    else:
+                        self._calm_start_ts = None
 
                     msgs.append({
                         "type": "slow",
@@ -287,6 +333,8 @@ class PartnerProcessor:
                         "direction":  act_result["direction"] if act_result else None,
                         "confidence": round(act_result["confidence"], 2) if act_result else None,
                         "state_description": state_desc,
+                        "calm_zone_s": calm_zone_s,
+                        "trace_activation": [round(v, 1) for v in self._trace_act],
                     })
 
         return msgs
@@ -357,6 +405,14 @@ class PartnerProcessor:
 
         self.baseline = bl
         return True
+
+    def clear_baseline(self) -> None:
+        """Remove the fitted baseline and reset activation state."""
+        self.baseline = None
+        self._prev_activation = None
+        self._calm_start_ts = None
+        self._trace_act.clear()
+        self._trace_act_t.clear()
 
     # ── for dyadic use ────────────────────────────────────────────────────────
 

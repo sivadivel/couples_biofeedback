@@ -18,9 +18,12 @@
   <span class="session-title">couples biofeedback</span>
   <span class="session-clock" id="session-clock" aria-label="session duration">00:00:00</span>
   <span class="baseline-indicator" id="baseline-indicator">no baseline</span>
-  <button class="btn" onclick="setBaseline('A')">set baseline — A</button>
-  <button class="btn" onclick="setBaseline('B')">set baseline — B</button>
+  <button class="btn" id="btn-baseline-A" onclick="setBaseline('A')">set baseline — A</button>
+  <button class="btn btn-clear" id="btn-clear-A" onclick="clearBaseline('A')" hidden>clear — A</button>
+  <button class="btn" id="btn-baseline-B" onclick="setBaseline('B')">set baseline — B</button>
+  <button class="btn btn-clear" id="btn-clear-B" onclick="clearBaseline('B')" hidden>clear — B</button>
   <a href="/mode_b" class="btn btn-calm">recovery mode →</a>
+  <button class="btn btn-theme" id="btn-theme" onclick="toggleDarkMode()" title="toggle dark mode">◐</button>
 </header>
 
 <!-- ── flood alert banner ───────────────────────────────────────────────── -->
@@ -40,40 +43,46 @@
       <div class="partner-header">
         <span class="partner-name a" id="name-A">Partner A</span>
         <span class="state-badge regulated" id="state-badge-A">regulated</span>
+        <span class="signal-dot" id="sig-dot-A" title="signal quality"></span>
+        <span class="battery-level" id="battery-A"></span>
+        <span class="connect-time" id="connect-time-A"></span>
       </div>
 
-      <!-- activation score + state description -->
-      <div class="activation-row">
-        <span class="activation-score" id="act-score-A">—</span>
-        <span class="activation-unit">/ 100</span>
-        <span class="activation-direction" id="act-dir-A"></span>
-      </div>
+      <!-- state description — prominent headline -->
       <p class="state-description" id="state-desc-A"></p>
 
-      <!-- hero HR -->
+      <!-- hero HR — single value -->
       <div class="hr-hero">
         <span class="hr-value" id="hr-value-A">—</span>
         <span class="hr-unit">bpm</span>
       </div>
       <div class="hr-delta" id="hr-delta-A">baseline not set</div>
 
-      <!-- sparkline -->
-      <canvas class="sparkline-canvas" id="sparkline-A"
-              aria-label="Heart rate trace for Partner A"></canvas>
+      <!-- activation score + time series -->
+      <div class="activation-row">
+        <span class="activation-score" id="act-score-A">—</span>
+        <span class="activation-unit">/ 100</span>
+        <span class="activation-direction" id="act-dir-A"></span>
+      </div>
+      <div class="calm-zone-row" id="calm-row-A" hidden>
+        <span id="calm-zone-A"></span> in calm zone
+      </div>
+      <canvas class="activation-canvas" id="act-trace-A"
+              aria-label="Activation score history for Partner A"></canvas>
 
       <!-- metric tiles -->
       <div class="metric-tiles">
 
         <div class="metric-tile" id="tile-rmssd-A">
-          <div class="tile-label">RMSSD</div>
+          <div class="tile-label">HRV</div>
           <div class="tile-value" id="rmssd-val-A">—</div>
           <div class="tile-unit">ms</div>
         </div>
 
         <div class="metric-tile" id="tile-hf-A">
-          <div class="tile-label">RSA proxy (HF)</div>
+          <div class="tile-label">vagal activity</div>
           <div class="tile-value" id="hf-val-A">—</div>
-          <div class="tile-unit">ms²/Hz</div>
+          <div class="tile-unit">ms²</div>
         </div>
 
         <div class="metric-tile" id="tile-resp-A">
@@ -98,40 +107,46 @@
       <div class="partner-header">
         <span class="partner-name b" id="name-B">Partner B</span>
         <span class="state-badge regulated" id="state-badge-B">regulated</span>
+        <span class="signal-dot" id="sig-dot-B" title="signal quality"></span>
+        <span class="battery-level" id="battery-B"></span>
+        <span class="connect-time" id="connect-time-B"></span>
       </div>
 
-      <!-- activation score + state description -->
-      <div class="activation-row">
-        <span class="activation-score" id="act-score-B">—</span>
-        <span class="activation-unit">/ 100</span>
-        <span class="activation-direction" id="act-dir-B"></span>
-      </div>
+      <!-- state description — prominent headline -->
       <p class="state-description" id="state-desc-B"></p>
 
-      <!-- hero HR -->
+      <!-- hero HR — single value -->
       <div class="hr-hero">
         <span class="hr-value" id="hr-value-B">—</span>
         <span class="hr-unit">bpm</span>
       </div>
       <div class="hr-delta" id="hr-delta-B">baseline not set</div>
 
-      <!-- sparkline -->
-      <canvas class="sparkline-canvas" id="sparkline-B"
-              aria-label="Heart rate trace for Partner B"></canvas>
+      <!-- activation score + time series -->
+      <div class="activation-row">
+        <span class="activation-score" id="act-score-B">—</span>
+        <span class="activation-unit">/ 100</span>
+        <span class="activation-direction" id="act-dir-B"></span>
+      </div>
+      <div class="calm-zone-row" id="calm-row-B" hidden>
+        <span id="calm-zone-B"></span> in calm zone
+      </div>
+      <canvas class="activation-canvas" id="act-trace-B"
+              aria-label="Activation score history for Partner B"></canvas>
 
       <!-- metric tiles -->
       <div class="metric-tiles">
 
         <div class="metric-tile" id="tile-rmssd-B">
-          <div class="tile-label">RMSSD</div>
+          <div class="tile-label">HRV</div>
           <div class="tile-value" id="rmssd-val-B">—</div>
           <div class="tile-unit">ms</div>
         </div>
 
         <div class="metric-tile" id="tile-hf-B">
-          <div class="tile-label">RSA proxy (HF)</div>
+          <div class="tile-label">vagal activity</div>
           <div class="tile-value" id="hf-val-B">—</div>
-          <div class="tile-unit">ms²/Hz</div>
+          <div class="tile-unit">ms²</div>
         </div>
 
         <div class="metric-tile" id="tile-resp-B">
@@ -175,6 +190,8 @@
       </div>
     </div>
 
+    <p class="dyadic-interp" id="dyadic-interp"></p>
+
     <canvas class="dual-trace-canvas" id="dual-trace"
             aria-label="Dual HR trace for both partners"></canvas>
 
@@ -191,6 +208,7 @@
 <!-- ── footer ───────────────────────────────────────────────────────────── -->
 <footer class="session-footer" role="contentinfo">
   physiological proxies — not emotion readouts. thresholds are personalized to this session.
+  <span class="kbd-hints">b set baseline · r recovery mode · d dark mode</span>
 </footer>
 
 <script src="/static/app.js"></script>

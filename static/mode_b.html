@@ -8,55 +8,124 @@
 </head>
 <body class="mode-b">
 
-<!-- screen reader summary -->
 <p aria-live="polite" style="position:absolute;left:-9999px;">
-  Recovery breathing screen. Follow the animated circle for paced breathing at 5.5 breaths per minute.
+  Recovery breathing screen. Follow the animated circle for paced breathing.
 </p>
 
 <!-- ── header ────────────────────────────────────────────────────────────── -->
 <header class="recovery-header" role="banner">
   <span class="recovery-title">recovery · breathe together</span>
   <span class="break-clock" id="break-clock" aria-label="break duration">00:00</span>
+  <button class="btn btn-theme" id="btn-theme-b" onclick="toggleDarkMode()" title="toggle dark mode" style="margin-left:auto;">◐</button>
 </header>
 
 <!-- ── main body ─────────────────────────────────────────────────────────── -->
 <main class="recovery-body" role="main">
 
-  <!-- breathing pacer -->
-  <div aria-label="Breathing pacer — expand and contract with the circle">
-    <div class="breath-container">
-      <!-- static guide ring -->
-      <div class="guide-ring" aria-hidden="true"></div>
-
-      <!-- animated filled circle -->
-      <div class="breath-circle" aria-hidden="true"></div>
-
-      <!-- cross-fading labels (CSS only, no JS) -->
-      <div aria-hidden="true" style="position:absolute;bottom:-44px;left:50%;transform:translateX(-50%);width:120px;text-align:center;height:22px;">
-        <span class="label-in">breathe in</span>
-        <span class="label-out">breathe out</span>
-      </div>
-    </div>
-
-    <p class="breath-rate-caption" style="margin-top:72px;">5.5 breaths / min</p>
+  <!-- pattern selector -->
+  <div class="pattern-selector" role="group" aria-label="Breathing pattern">
+    <button class="pattern-btn active" data-pattern="coherence">coherence</button>
+    <button class="pattern-btn" data-pattern="box">box</button>
+    <button class="pattern-btn" data-pattern="478">4-7-8</button>
   </div>
 
-  <!-- per-partner coherence -->
-  <div class="coherence-section" aria-label="Coherence feedback">
-    <div class="coherence-row">
-      <span class="coherence-partner-label" id="label-a">Partner A</span>
-      <div class="coherence-track" role="progressbar" aria-valuenow="0" aria-valuemin="0" aria-valuemax="100" aria-label="Partner A coherence">
-        <div class="coherence-fill" id="coh-fill-b-A"></div>
+  <!-- breathing pacer -->
+  <div class="breath-outer">
+    <div class="breath-container" role="img" aria-label="Breathing pacer — follow the expanding circle">
+      <svg class="breath-arc-svg" viewBox="0 0 260 260" aria-hidden="true">
+        <circle class="arc-track" cx="130" cy="130" r="122"/>
+        <circle class="arc-fill"  cx="130" cy="130" r="122" id="arc-fill"/>
+      </svg>
+      <div class="guide-ring" aria-hidden="true"></div>
+      <div class="breath-circle" id="breath-circle" aria-hidden="true"></div>
+      <div class="breath-center" aria-hidden="true">
+        <span class="breath-countdown" id="breath-countdown"></span>
+        <span class="breath-phase-label" id="breath-phase-label">breathe in</span>
       </div>
-      <span class="coherence-val" id="coh-val-b-A">—</span>
     </div>
-    <div class="coherence-row">
-      <span class="coherence-partner-label" id="label-b">Partner B</span>
-      <div class="coherence-track" role="progressbar" aria-valuenow="0" aria-valuemin="0" aria-valuemax="100" aria-label="Partner B coherence">
-        <div class="coherence-fill" id="coh-fill-b-B"></div>
+    <p class="breath-rate-caption" id="breath-rate-caption">5.5 breaths / min · resonance</p>
+  </div>
+
+  <!-- ambient sound -->
+  <div class="sound-control">
+    <button class="btn sound-btn" id="sound-toggle" onclick="toggleSound()">sounds off</button>
+    <input type="range" class="sound-volume" id="sound-volume"
+           min="0" max="1" step="0.05" value="0.4"
+           aria-label="ambient sound volume"
+           oninput="onVolumeChange(this.value)">
+  </div>
+
+  <!-- HRV coherence feedback during breathing (Feature 1) -->
+  <div class="breath-coherence-section" id="breath-coh-section">
+    <span class="breath-coh-heading">HRV coherence</span>
+    <div class="breath-coh-row" id="breath-coh-row-A">
+      <span class="breath-coh-label" id="label-a-coh">Partner A</span>
+      <div class="breath-coh-track">
+        <div class="breath-coh-fill" id="breath-coh-fill-A"></div>
       </div>
-      <span class="coherence-val" id="coh-val-b-B">—</span>
+      <span class="breath-coh-val" id="breath-coh-val-A">—</span>
+      <span class="breath-coh-trend" id="breath-coh-trend-A"></span>
     </div>
+    <div class="breath-coh-row" id="breath-coh-row-B">
+      <span class="breath-coh-label" id="label-b-coh">Partner B</span>
+      <div class="breath-coh-track">
+        <div class="breath-coh-fill" id="breath-coh-fill-B"></div>
+      </div>
+      <span class="breath-coh-val" id="breath-coh-val-B">—</span>
+      <span class="breath-coh-trend" id="breath-coh-trend-B"></span>
+    </div>
+  </div>
+
+  <!-- per-partner activation + coherence -->
+  <div class="recovery-metrics" aria-label="Physiological state">
+
+    <!-- Partner A -->
+    <div class="recovery-partner" id="rec-section-A">
+      <div class="rec-partner-header">
+        <span class="coherence-partner-label" id="label-a">Partner A</span>
+        <span class="rec-act-score" id="rec-act-A">—</span>
+        <span class="rec-act-unit">/ 100</span>
+        <span class="rec-act-zone" id="rec-zone-A"></span>
+      </div>
+      <canvas class="rec-act-canvas" id="rec-trace-A"
+              aria-label="Activation trend for Partner A"></canvas>
+      <div class="coherence-row" style="margin-top:6px;">
+        <span class="rec-coh-label">coherence</span>
+        <div class="coherence-track" role="progressbar"
+             aria-valuenow="0" aria-valuemin="0" aria-valuemax="100"
+             aria-label="Partner A coherence">
+          <div class="coherence-fill" id="coh-fill-b-A"></div>
+        </div>
+        <span class="coherence-val" id="coh-val-b-A">—</span>
+      </div>
+    </div>
+
+    <!-- Partner B -->
+    <div class="recovery-partner" id="rec-section-B">
+      <div class="rec-partner-header">
+        <span class="coherence-partner-label" id="label-b">Partner B</span>
+        <span class="rec-act-score" id="rec-act-B">—</span>
+        <span class="rec-act-unit">/ 100</span>
+        <span class="rec-act-zone" id="rec-zone-B"></span>
+      </div>
+      <canvas class="rec-act-canvas" id="rec-trace-B"
+              aria-label="Activation trend for Partner B"></canvas>
+      <div class="coherence-row" style="margin-top:6px;">
+        <span class="rec-coh-label">coherence</span>
+        <div class="coherence-track" role="progressbar"
+             aria-valuenow="0" aria-valuemin="0" aria-valuemax="100"
+             aria-label="Partner B coherence">
+          <div class="coherence-fill" id="coh-fill-b-B"></div>
+        </div>
+        <span class="coherence-val" id="coh-val-b-B">—</span>
+      </div>
+    </div>
+
+    <!-- readiness indicator -->
+    <div class="readiness-block" id="readiness-block" hidden>
+      calm zone reached · <span id="readiness-time">—</span> · ready to reconnect
+    </div>
+
   </div>
 
 </main>

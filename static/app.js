@@ -11,37 +11,51 @@
 const state = {
   A: {
     name: "Partner A",
+    connectedAt: null,
+    sensorOnline: false,
+    signalQuality: null,
+    batteryLevel: null,
     mean_hr: null,
     rmssd: null,
     hf: null,
     coherence: null,
+    prevCoherence: null,
     resp_rate: null,
     activation: null,
     direction: null,
     confidence: null,
     state_description: null,
+    trace_activation: [],
     flooded: false,
     hr_baseline_pct: null,
     trace_hr: [],
     trace_times: [],
     baseline_set: false,
+    calm_zone_s: 0,
   },
   B: {
     name: "Partner B",
+    connectedAt: null,
+    sensorOnline: false,
+    signalQuality: null,
+    batteryLevel: null,
     mean_hr: null,
     rmssd: null,
     hf: null,
     coherence: null,
+    prevCoherence: null,
     resp_rate: null,
     activation: null,
     direction: null,
     confidence: null,
     state_description: null,
+    trace_activation: [],
     flooded: false,
     hr_baseline_pct: null,
     trace_hr: [],
     trace_times: [],
     baseline_set: false,
+    calm_zone_s: 0,
   },
   dyadic: {
     peak_r: null,
@@ -54,6 +68,7 @@ const state = {
 // ── WebSocket connection ──────────────────────────────────────────────────────
 
 let ws = null;
+let singlePartnerMode = false;
 
 function connectWS() {
   const proto = location.protocol === "https:" ? "wss:" : "ws:";
@@ -87,6 +102,7 @@ function handleMessage(data) {
 
     case "fast":
       if (p) {
+        if (!state[p].connectedAt) state[p].connectedAt = Date.now();
         state[p].mean_hr = data.mean_hr;
         updateHeroHR(p);
       }
@@ -94,16 +110,32 @@ function handleMessage(data) {
 
     case "mid":
       if (p) {
-        state[p].mean_hr       = data.mean_hr;
-        state[p].rmssd         = data.rmssd;
-        state[p].flooded       = data.flooded;
+        state[p].mean_hr         = data.mean_hr;
+        state[p].rmssd           = data.rmssd;
+        state[p].flooded         = data.flooded;
         state[p].hr_baseline_pct = data.hr_baseline_pct;
+        state[p].signalQuality   = data.signal_quality ?? null;
         if (data.trace_hr) state[p].trace_hr = data.trace_hr;
         if (data.trace_times) state[p].trace_times = data.trace_times;
         updateHeroHR(p);
         updateMidTiles(p);
         updateFloodState(p);
-        redrawSparkline(p);
+        updateSignalQuality(p);
+        redrawDualTrace();
+      }
+      break;
+
+    case "sensor_status":
+      if (p) {
+        state[p].sensorOnline = data.online;
+        updateSensorStatus(p);
+      }
+      break;
+
+    case "battery":
+      if (p) {
+        state[p].batteryLevel = data.level;
+        updateBatteryDisplay(p);
       }
       break;
 
@@ -116,8 +148,13 @@ function handleMessage(data) {
         state[p].direction         = data.direction;
         state[p].confidence        = data.confidence;
         state[p].state_description = data.state_description;
+        state[p].calm_zone_s       = data.calm_zone_s ?? 0;
+        if (data.trace_activation) state[p].trace_activation = data.trace_activation;
         updateSlowTiles(p);
         updateCoherenceBarModeB(p);
+        redrawActivationTrace(p);
+        updateActivationModeB(p);
+        updateCalmZone(p);
       }
       break;
 
@@ -134,6 +171,22 @@ function handleMessage(data) {
       state.A.name = (data.names && data.names.A) || state.A.name;
       state.B.name = (data.names && data.names.B) || state.B.name;
       applyPartnerNames();
+      if (data.single_partner) {
+        singlePartnerMode = true;
+        const panelB = document.getElementById("panel-B");
+        if (panelB) panelB.style.display = "none";
+        const dyadic = document.querySelector(".dyadic-panel");
+        if (dyadic) dyadic.style.display = "none";
+        // mode A: hide partner B coherence row
+        const labelB = document.getElementById("label-b");
+        if (labelB) labelB.closest(".coherence-row") && (labelB.closest(".coherence-row").style.display = "none");
+        // mode B: hide partner B section
+        const recSectionB = document.getElementById("rec-section-B");
+        if (recSectionB) recSectionB.style.display = "none";
+        // mode B: hide partner B coherence row in breath section
+        const bCohRow = document.getElementById("breath-coh-row-B");
+        if (bCohRow) bCohRow.style.display = "none";
+      }
       break;
 
     case "baseline_status":
@@ -272,7 +325,7 @@ function updateSlowTiles(p) {
   if (descEl) descEl.textContent = s.state_description || "";
 
   const hfEl = document.getElementById(`hf-val-${p}`);
-  if (hfEl) hfEl.textContent = s.hf !== null ? s.hf.toExponential(2) : "—";
+  if (hfEl) hfEl.textContent = s.hf !== null ? Math.round(s.hf).toLocaleString() : "—";
 
   const rrEl = document.getElementById(`resp-val-${p}`);
   if (rrEl) rrEl.textContent = s.resp_rate !== null ? s.resp_rate.toFixed(1) : "—";
@@ -349,6 +402,30 @@ function updateDyadicPanel() {
 
   const phaseEl = document.getElementById("dyadic-phase");
   if (phaseEl) phaseEl.textContent = d.phase || "—";
+
+  const interpEl = document.getElementById("dyadic-interp");
+  if (interpEl) {
+    const r = d.peak_r;
+    const bothFlooded = state.A.flooded && state.B.flooded;
+    const anyFlooded  = state.A.flooded || state.B.flooded;
+    let text = "";
+    if (r !== null) {
+      if (r < 0.2) {
+        text = "Physiologies moving independently.";
+      } else if (r >= 0.4 && bothFlooded) {
+        text = "High coupling while both flooded — locked in conflict, not co-regulation.";
+      } else if (r >= 0.4 && d.phase === "in-phase" && !anyFlooded) {
+        text = "Synchronized and both settled — co-regulation signal.";
+      } else if (r >= 0.4 && d.phase === "anti-phase") {
+        text = "Synchronized but moving in opposite directions.";
+      } else if (r >= 0.4) {
+        text = "Physiologies closely coupled.";
+      } else {
+        text = "Weak coupling — physiologies loosely linked.";
+      }
+    }
+    interpEl.textContent = text;
+  }
 }
 
 function redrawDualTrace() {
@@ -356,15 +433,82 @@ function redrawDualTrace() {
   drawDualTrace(canvas, state.A.trace_hr, state.B.trace_hr, "#c0392b", "#1a6baa");
 }
 
+function drawActivationTrace(canvas, values) {
+  if (!canvas) return;
+  const dpr = window.devicePixelRatio || 1;
+  const W = canvas.clientWidth;
+  const H = canvas.clientHeight;
+  if (W === 0 || H === 0) return;
+
+  if (canvas.width !== W * dpr || canvas.height !== H * dpr) {
+    canvas.width  = W * dpr;
+    canvas.height = H * dpr;
+  }
+
+  const ctx = canvas.getContext("2d");
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  ctx.clearRect(0, 0, W, H);
+
+  const toY = (v) => H - (Math.min(Math.max(v, 0), 100) / 100) * H;
+
+  // zone bands (low / moderate / high)
+  ctx.fillStyle = "#fdecea"; ctx.fillRect(0, 0,        W, toY(65));           // high — red tint
+  ctx.fillStyle = "#fef5e7"; ctx.fillRect(0, toY(65),  W, toY(35) - toY(65)); // moderate — amber tint
+  ctx.fillStyle = "#d5f5f0"; ctx.fillRect(0, toY(35),  W, H - toY(35));       // low — calm tint
+
+  // zone dividers
+  ctx.strokeStyle = "rgba(0,0,0,0.08)";
+  ctx.lineWidth = 1;
+  [[35, "dashed"], [65, "dashed"]].forEach(([v]) => {
+    ctx.beginPath();
+    ctx.setLineDash([4, 4]);
+    ctx.moveTo(0, toY(v)); ctx.lineTo(W, toY(v));
+    ctx.stroke();
+  });
+  ctx.setLineDash([]);
+
+  if (!values || values.length < 2) return;
+
+  // Fixed window: 120 points ≈ 10 min at ~5 s/slow cycle.
+  // Points anchor to the left so the trace grows rightward as data accumulates.
+  const MAX_POINTS = 120;
+  const toX = (i) => (i / (MAX_POINTS - 1)) * W;
+
+  ctx.beginPath();
+  ctx.moveTo(toX(0), toY(values[0]));
+  for (let i = 1; i < values.length; i++) ctx.lineTo(toX(i), toY(values[i]));
+  ctx.strokeStyle = "rgba(44,62,80,0.85)";
+  ctx.lineWidth = 2;
+  ctx.lineJoin = "round";
+  ctx.stroke();
+
+  // dot at current value, colored by zone
+  const last = values[values.length - 1];
+  const dotColor = last >= 65 ? "#c0392b" : last >= 35 ? "#e67e22" : "#16a085";
+  ctx.beginPath();
+  ctx.arc(toX(values.length - 1), toY(last), 4, 0, Math.PI * 2);
+  ctx.fillStyle = dotColor;
+  ctx.fill();
+}
+
+function redrawActivationTrace(p) {
+  const canvas = document.getElementById(`act-trace-${p}`);
+  drawActivationTrace(canvas, state[p].trace_activation);
+}
+
 function applyPartnerNames() {
-  const nameA  = document.getElementById("name-A");
-  const nameB  = document.getElementById("name-B");
-  const labelA = document.getElementById("label-a");
-  const labelB = document.getElementById("label-b");
-  if (nameA)  nameA.textContent  = state.A.name;
-  if (nameB)  nameB.textContent  = state.B.name;
-  if (labelA) labelA.textContent = state.A.name;
-  if (labelB) labelB.textContent = state.B.name;
+  const nameA     = document.getElementById("name-A");
+  const nameB     = document.getElementById("name-B");
+  const labelA    = document.getElementById("label-a");
+  const labelB    = document.getElementById("label-b");
+  const labelACoh = document.getElementById("label-a-coh");
+  const labelBCoh = document.getElementById("label-b-coh");
+  if (nameA)     nameA.textContent     = state.A.name;
+  if (nameB)     nameB.textContent     = state.B.name;
+  if (labelA)    labelA.textContent    = state.A.name;
+  if (labelB)    labelB.textContent    = state.B.name;
+  if (labelACoh) labelACoh.textContent = state.A.name;
+  if (labelBCoh) labelBCoh.textContent = state.B.name;
 }
 
 function updateBaselineIndicator() {
@@ -383,9 +527,63 @@ function updateBaselineIndicator() {
     ind.textContent = "no baseline";
     ind.className = "baseline-indicator";
   }
+
+  // show clear button only when baseline is set for that partner
+  for (const p of ["A", "B"]) {
+    const clearBtn = document.getElementById(`btn-clear-${p}`);
+    if (clearBtn) clearBtn.hidden = !state[p].baseline_set;
+  }
 }
 
 // ── Mode B DOM updates ────────────────────────────────────────────────────────
+
+function updateSensorStatus(p) {
+  const panel = document.getElementById(`panel-${p}`);
+  const badge = document.getElementById(`state-badge-${p}`);
+  const online = state[p].sensorOnline;
+
+  if (panel) panel.classList.toggle("offline", !online);
+
+  if (badge) {
+    if (!online) {
+      badge.textContent = "offline";
+      badge.className = "state-badge offline";
+    } else {
+      // restore normal badge from flooded state
+      badge.textContent = state[p].flooded ? "flooded" : "regulated";
+      badge.className   = "state-badge " + (state[p].flooded ? "flooded" : "regulated");
+    }
+  }
+}
+
+function updateSignalQuality(p) {
+  const el = document.getElementById(`sig-dot-${p}`);
+  if (!el) return;
+  const q = state[p].signalQuality;
+  if (q === null) {
+    el.className = "signal-dot";
+    el.title = "signal quality: waiting";
+  } else if (q >= 0.90) {
+    el.className = "signal-dot good";
+    el.title = `signal quality: ${Math.round(q * 100)}% good`;
+  } else if (q >= 0.75) {
+    el.className = "signal-dot fair";
+    el.title = `signal quality: ${Math.round(q * 100)}% — check strap`;
+  } else {
+    el.className = "signal-dot poor";
+    el.title = `signal quality: ${Math.round(q * 100)}% — poor contact`;
+  }
+}
+
+function updateBatteryDisplay(p) {
+  const el = document.getElementById(`battery-${p}`);
+  if (!el) return;
+  const lvl = state[p].batteryLevel;
+  if (lvl === null) { el.textContent = ""; el.className = "battery-level"; return; }
+  el.textContent = `${lvl}%`;
+  el.className = "battery-level" + (lvl <= 20 ? " low" : "");
+  el.title = `battery: ${lvl}%`;
+}
 
 function updateCoherenceBarModeB(p) {
   const fillEl = document.getElementById(`coh-fill-b-${p}`);
@@ -399,6 +597,296 @@ function updateCoherenceBarModeB(p) {
     if (fillEl) fillEl.style.width = "0%";
     if (valEl)  valEl.textContent  = "—";
   }
+
+  // Prominent breath-coherence-section (Feature 1)
+  const bFillEl  = document.getElementById(`breath-coh-fill-${p}`);
+  const bValEl   = document.getElementById(`breath-coh-val-${p}`);
+  const bTrendEl = document.getElementById(`breath-coh-trend-${p}`);
+  if (s.coherence !== null) {
+    const pct = Math.min(s.coherence / 3.0, 1.0) * 100;
+    if (bFillEl) bFillEl.style.width = pct.toFixed(1) + "%";
+    if (bValEl)  bValEl.textContent  = s.coherence.toFixed(2);
+    if (bTrendEl) {
+      const prev = s.prevCoherence;
+      let arrow = "→", cls = "trend-flat";
+      if (prev !== null) {
+        if (s.coherence > prev + 0.05)      { arrow = "↑"; cls = "trend-up"; }
+        else if (s.coherence < prev - 0.05) { arrow = "↓"; cls = "trend-down"; }
+      }
+      bTrendEl.textContent = arrow;
+      bTrendEl.className   = `breath-coh-trend ${cls}`;
+    }
+  } else {
+    if (bFillEl)  bFillEl.style.width = "0%";
+    if (bValEl)   bValEl.textContent  = "—";
+    if (bTrendEl) { bTrendEl.textContent = ""; bTrendEl.className = "breath-coh-trend"; }
+  }
+  s.prevCoherence = s.coherence;
+}
+
+function updateCalmZone(p) {
+  const row = document.getElementById(`calm-row-${p}`);
+  const el  = document.getElementById(`calm-zone-${p}`);
+  const s   = state[p].calm_zone_s;
+  if (s > 0) {
+    if (row) row.hidden = false;
+    if (el) {
+      const m  = Math.floor(s / 60);
+      const ss = String(s % 60).padStart(2, "0");
+      el.textContent = `${m}:${ss}`;
+    }
+  } else {
+    if (row) row.hidden = true;
+  }
+}
+
+function updateActivationModeB(p) {
+  const scoreEl = document.getElementById(`rec-act-${p}`);
+  const zoneEl  = document.getElementById(`rec-zone-${p}`);
+  if (!scoreEl && !zoneEl) return;
+
+  const v = state[p].activation;
+  const zoneClass = v === null ? "" : v < 35 ? " zone-low" : v < 65 ? " zone-mid" : " zone-high";
+  const zoneLabel = v === null ? "" : v < 35 ? "low" : v < 65 ? "moderate" : "high";
+
+  if (scoreEl) {
+    scoreEl.textContent = v !== null ? Math.round(v) : "—";
+    scoreEl.className   = "rec-act-score" + zoneClass;
+  }
+  if (zoneEl) {
+    zoneEl.textContent = zoneLabel;
+    zoneEl.className   = "rec-act-zone" + (zoneLabel ? " " + zoneClass.trim() : "");
+  }
+
+  redrawRecActivationTrace(p);
+  checkReadiness();
+}
+
+function redrawRecActivationTrace(p) {
+  const canvas = document.getElementById(`rec-trace-${p}`);
+  drawActivationTrace(canvas, state[p].trace_activation);
+}
+
+function checkReadiness() {
+  const block = document.getElementById("readiness-block");
+  if (!block) return;
+  const aReady = state.A.activation !== null && state.A.activation < 35;
+  const bReady = singlePartnerMode || (state.B.activation !== null && state.B.activation < 35);
+  const ready  = aReady && bReady;
+  block.hidden = !ready;
+
+  if (ready) {
+    const timeEl = document.getElementById("readiness-time");
+    if (timeEl) {
+      const maxS = Math.max(state.A.calm_zone_s || 0, singlePartnerMode ? 0 : (state.B.calm_zone_s || 0));
+      const m  = Math.floor(maxS / 60);
+      const ss = String(maxS % 60).padStart(2, "0");
+      timeEl.textContent = `${m}:${ss}`;
+    }
+  }
+}
+
+// ── Mode B: breathing animation ──────────────────────────────────────────────
+
+const BREATH_PATTERNS = {
+  coherence: {
+    caption: "5.5 breaths / min · resonance",
+    phases: [
+      { label: "breathe in",  s: 5.5, toScale: 1.0,  color: "#16a085" },
+      { label: "breathe out", s: 5.5, toScale: 0.56, color: "#2980b9" },
+    ],
+  },
+  box: {
+    caption: "box breathing · 4 breaths / min",
+    phases: [
+      { label: "breathe in",  s: 4, toScale: 1.0,  color: "#16a085" },
+      { label: "hold",        s: 4, toScale: 1.0,  color: "#b7950b" },
+      { label: "breathe out", s: 4, toScale: 0.56, color: "#2980b9" },
+      { label: "hold",        s: 4, toScale: 0.56, color: "#b7950b" },
+    ],
+  },
+  "478": {
+    caption: "4-7-8 · ~3 breaths / min",
+    phases: [
+      { label: "breathe in",  s: 4, toScale: 1.0,  color: "#16a085" },
+      { label: "hold",        s: 7, toScale: 1.0,  color: "#b7950b" },
+      { label: "breathe out", s: 8, toScale: 0.56, color: "#2980b9" },
+    ],
+  },
+};
+
+const ARC_CIRC = 2 * Math.PI * 122; // circumference for r=122
+
+const breathAnim = {
+  patternKey: "coherence",
+  phaseIdx: 0,
+  phaseStartTs: null,
+  fromScale: 0.56,
+  rafId: null,
+};
+
+function easeInOutSine(t) {
+  return -(Math.cos(Math.PI * t) - 1) / 2;
+}
+
+function breathTick(ts) {
+  const phases = BREATH_PATTERNS[breathAnim.patternKey].phases;
+  if (breathAnim.phaseStartTs === null) breathAnim.phaseStartTs = ts;
+
+  const phase = phases[breathAnim.phaseIdx];
+  const elapsed = (ts - breathAnim.phaseStartTs) / 1000;
+  const progress = Math.min(elapsed / phase.s, 1.0);
+  const eased = easeInOutSine(progress);
+  const scale = breathAnim.fromScale + (phase.toScale - breathAnim.fromScale) * eased;
+
+  const circleEl  = document.getElementById("breath-circle");
+  const arcEl     = document.getElementById("arc-fill");
+  const countdownEl = document.getElementById("breath-countdown");
+
+  if (circleEl) {
+    circleEl.style.transform = `scale(${scale.toFixed(4)})`;
+    circleEl.style.opacity   = (0.75 + 0.25 * eased).toFixed(3);
+  }
+  if (arcEl) {
+    arcEl.style.strokeDashoffset = (ARC_CIRC * (1 - progress)).toFixed(1);
+    arcEl.style.stroke = phase.color;
+  }
+  if (countdownEl) {
+    const rem = Math.ceil(phase.s - elapsed);
+    countdownEl.textContent = rem > 0 ? rem : "";
+  }
+
+  if (progress >= 1.0) {
+    breathAnim.fromScale   = phase.toScale;
+    breathAnim.phaseIdx    = (breathAnim.phaseIdx + 1) % phases.length;
+    breathAnim.phaseStartTs = ts;
+    const next = phases[breathAnim.phaseIdx];
+    const labelEl = document.getElementById("breath-phase-label");
+    if (labelEl) labelEl.textContent = next.label;
+    if (arcEl) arcEl.style.strokeDashoffset = ARC_CIRC.toFixed(1); // reset arc
+  }
+
+  breathAnim.rafId = requestAnimationFrame(breathTick);
+}
+
+function startBreathAnim() {
+  if (breathAnim.rafId) cancelAnimationFrame(breathAnim.rafId);
+  breathAnim.phaseStartTs = null;
+
+  const phases = BREATH_PATTERNS[breathAnim.patternKey].phases;
+  const labelEl = document.getElementById("breath-phase-label");
+  if (labelEl) labelEl.textContent = phases[breathAnim.phaseIdx].label;
+
+  if (!window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
+    breathAnim.rafId = requestAnimationFrame(breathTick);
+  }
+}
+
+function switchPattern(key) {
+  // capture current scale before switching
+  const circleEl = document.getElementById("breath-circle");
+  if (circleEl) {
+    const m = circleEl.style.transform.match(/scale\(([^)]+)\)/);
+    if (m) breathAnim.fromScale = parseFloat(m[1]);
+  }
+  breathAnim.patternKey   = key;
+  breathAnim.phaseIdx     = 0;
+  breathAnim.phaseStartTs = null;
+
+  const captionEl = document.getElementById("breath-rate-caption");
+  if (captionEl) captionEl.textContent = BREATH_PATTERNS[key].caption;
+
+  document.querySelectorAll(".pattern-btn").forEach(btn => {
+    btn.classList.toggle("active", btn.dataset.pattern === key);
+  });
+
+  startBreathAnim();
+}
+
+// ── Mode B: ambient sound (pink noise) ───────────────────────────────────────
+
+let audioCtx  = null;
+let soundGain = null;
+let soundOn   = false;
+
+function initAudio() {
+  if (audioCtx) return;
+  audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+
+  // Generate 20s stereo pink noise buffer
+  const sr = audioCtx.sampleRate;
+  const len = sr * 20;
+  const buf = audioCtx.createBuffer(2, len, sr);
+
+  for (let ch = 0; ch < 2; ch++) {
+    const d = buf.getChannelData(ch);
+    let b0=0,b1=0,b2=0,b3=0,b4=0,b5=0,b6=0;
+    for (let i = 0; i < len; i++) {
+      const w = Math.random() * 2 - 1;
+      b0 = 0.99886*b0 + w*0.0555179;
+      b1 = 0.99332*b1 + w*0.0750759;
+      b2 = 0.96900*b2 + w*0.1538520;
+      b3 = 0.86650*b3 + w*0.3104856;
+      b4 = 0.55000*b4 + w*0.5329522;
+      b5 = -0.7616*b5  - w*0.0168980;
+      d[i] = (b0+b1+b2+b3+b4+b5+b6+w*0.5362) / 9;
+      b6 = w*0.115926;
+    }
+    // crossfade loop ends (100ms) to eliminate click
+    const fade = Math.floor(sr * 0.1);
+    for (let i = 0; i < fade; i++) {
+      const t = i / fade;
+      d[len - fade + i] = d[len - fade + i] * (1 - t) + d[i] * t;
+    }
+  }
+
+  const src = audioCtx.createBufferSource();
+  src.buffer = buf;
+  src.loop   = true;
+
+  const lpf = audioCtx.createBiquadFilter();
+  lpf.type            = "lowpass";
+  lpf.frequency.value = 700;
+  lpf.Q.value         = 0.6;
+
+  soundGain = audioCtx.createGain();
+  soundGain.gain.value = 0;
+
+  src.connect(lpf);
+  lpf.connect(soundGain);
+  soundGain.connect(audioCtx.destination);
+  src.start();
+}
+
+function toggleSound() {
+  if (!audioCtx) initAudio();
+  if (audioCtx.state === "suspended") audioCtx.resume();
+
+  soundOn = !soundOn;
+  const vol = parseFloat(document.getElementById("sound-volume").value);
+  soundGain.gain.setTargetAtTime(soundOn ? vol * 0.35 : 0, audioCtx.currentTime, 0.6);
+
+  const btn = document.getElementById("sound-toggle");
+  if (btn) btn.textContent = soundOn ? "sounds on" : "sounds off";
+}
+
+function onVolumeChange(val) {
+  if (soundGain && soundOn) {
+    soundGain.gain.setTargetAtTime(parseFloat(val) * 0.35, audioCtx.currentTime, 0.1);
+  }
+}
+
+// ── dark mode ─────────────────────────────────────────────────────────────────
+
+function toggleDarkMode() {
+  const html    = document.documentElement;
+  const isDark  = html.getAttribute("data-theme") === "dark";
+  const theme   = isDark ? "light" : "dark";
+  html.setAttribute("data-theme", theme);
+  localStorage.setItem("theme", theme);
+  document.querySelectorAll(".btn-theme").forEach(btn => {
+    btn.textContent = theme === "dark" ? "◑" : "◐";
+  });
 }
 
 // ── baseline button ───────────────────────────────────────────────────────────
@@ -406,6 +894,12 @@ function updateCoherenceBarModeB(p) {
 function setBaseline(partner) {
   if (ws && ws.readyState === WebSocket.OPEN) {
     ws.send(JSON.stringify({ type: "set_baseline", partner }));
+  }
+}
+
+function clearBaseline(partner) {
+  if (ws && ws.readyState === WebSocket.OPEN) {
+    ws.send(JSON.stringify({ type: "clear_baseline", partner }));
   }
 }
 
@@ -455,15 +949,67 @@ function applyReducedMotion() {
 // ── init ──────────────────────────────────────────────────────────────────────
 
 document.addEventListener("DOMContentLoaded", () => {
+  // apply saved/preferred theme
+  const savedTheme = localStorage.getItem("theme") ||
+    (window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light");
+  if (savedTheme === "dark") {
+    document.documentElement.setAttribute("data-theme", "dark");
+    document.querySelectorAll(".btn-theme").forEach(btn => { btn.textContent = "◑"; });
+  }
+
   applyReducedMotion();
   connectWS();
   startSessionClock();   // no-op if element absent (Mode B)
   startBreakClock();     // no-op if element absent (Mode A)
 
+  // connect-time ticker (Mode A)
+  setInterval(() => {
+    for (const p of ["A", "B"]) {
+      const el = document.getElementById(`connect-time-${p}`);
+      if (!el) continue;
+      if (!state[p].connectedAt) { el.textContent = ""; continue; }
+      const s = Math.floor((Date.now() - state[p].connectedAt) / 1000);
+      const mm = String(Math.floor(s / 60)).padStart(2, "0");
+      const ss = String(s % 60).padStart(2, "0");
+      el.textContent = `${mm}:${ss}`;
+    }
+  }, 1000);
+
+  // Mode B: breathing animation + pattern buttons
+  if (document.getElementById("breath-circle")) {
+    document.querySelectorAll(".pattern-btn").forEach(btn => {
+      btn.addEventListener("click", () => switchPattern(btn.dataset.pattern));
+    });
+    switchPattern("coherence");
+  }
+
+  // keyboard shortcuts
+  document.addEventListener("keydown", (e) => {
+    if (e.target.tagName === "INPUT" || e.target.tagName === "TEXTAREA" || e.target.isContentEditable) return;
+    if (e.metaKey || e.ctrlKey || e.altKey) return;
+    switch (e.key) {
+      case "b":
+        setBaseline("A");
+        if (!singlePartnerMode) setBaseline("B");
+        break;
+      case "r":
+        if (location.pathname !== "/mode_b") location.href = "/mode_b";
+        break;
+      case "Escape":
+        if (location.pathname !== "/") location.href = "/";
+        break;
+      case "d":
+        toggleDarkMode();
+        break;
+    }
+  });
+
   // resize canvases on window resize
   window.addEventListener("resize", () => {
-    redrawSparkline("A");
-    redrawSparkline("B");
+    redrawActivationTrace("A");
+    redrawActivationTrace("B");
     redrawDualTrace();
+    redrawRecActivationTrace("A");
+    redrawRecActivationTrace("B");
   });
 });

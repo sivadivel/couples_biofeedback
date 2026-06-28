@@ -1,0 +1,14 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(pip install *)",
+      "Bash(pip3 install *)",
+      "Bash(python3 -m venv /Users/levidavis/Desktop/biofeedback/.venv)",
+      "Bash(/Users/levidavis/Desktop/biofeedback/.venv/bin/pip install *)",
+      "Bash(timeout 5 .venv/bin/python main.py --simulate)",
+      "Bash(/Users/levidavis/Desktop/biofeedback/.venv/bin/python *)",
+      "WebSearch",
+      "Bash(.venv/bin/python *)"
+    ]
+  }
+}

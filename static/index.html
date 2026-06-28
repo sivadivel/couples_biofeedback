@@ -1,0 +1,198 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>couples biofeedback</title>
+  <link rel="stylesheet" href="/static/style.css" />
+</head>
+<body>
+
+<!-- screen reader summary -->
+<p class="sr-only" aria-live="polite" id="sr-summary" style="position:absolute;left:-9999px;">
+  Couples biofeedback live session monitor.
+</p>
+
+<!-- ── session header ───────────────────────────────────────────────────── -->
+<header class="session-header" role="banner">
+  <span class="session-title">couples biofeedback</span>
+  <span class="session-clock" id="session-clock" aria-label="session duration">00:00:00</span>
+  <span class="baseline-indicator" id="baseline-indicator">no baseline</span>
+  <button class="btn" onclick="setBaseline('A')">set baseline — A</button>
+  <button class="btn" onclick="setBaseline('B')">set baseline — B</button>
+  <a href="/mode_b" class="btn btn-calm">recovery mode →</a>
+</header>
+
+<!-- ── flood alert banner ───────────────────────────────────────────────── -->
+<div class="flood-banner" id="flood-banner" role="alert" aria-live="assertive">
+  <span class="flood-banner-text" id="flood-banner-text"></span>
+  <a href="/mode_b" class="btn btn-danger">start recovery</a>
+</div>
+
+<!-- ── main content ─────────────────────────────────────────────────────── -->
+<main class="main-content" role="main">
+
+  <!-- partner panels -->
+  <div class="partner-row">
+
+    <!-- ── Partner A ──────────────────────────────────────────────────── -->
+    <section class="partner-panel" id="panel-A" aria-label="Partner A physiological state">
+      <div class="partner-header">
+        <span class="partner-name a" id="name-A">Partner A</span>
+        <span class="state-badge regulated" id="state-badge-A">regulated</span>
+      </div>
+
+      <!-- activation score + state description -->
+      <div class="activation-row">
+        <span class="activation-score" id="act-score-A">—</span>
+        <span class="activation-unit">/ 100</span>
+        <span class="activation-direction" id="act-dir-A"></span>
+      </div>
+      <p class="state-description" id="state-desc-A"></p>
+
+      <!-- hero HR -->
+      <div class="hr-hero">
+        <span class="hr-value" id="hr-value-A">—</span>
+        <span class="hr-unit">bpm</span>
+      </div>
+      <div class="hr-delta" id="hr-delta-A">baseline not set</div>
+
+      <!-- sparkline -->
+      <canvas class="sparkline-canvas" id="sparkline-A"
+              aria-label="Heart rate trace for Partner A"></canvas>
+
+      <!-- metric tiles -->
+      <div class="metric-tiles">
+
+        <div class="metric-tile" id="tile-rmssd-A">
+          <div class="tile-label">RMSSD</div>
+          <div class="tile-value" id="rmssd-val-A">—</div>
+          <div class="tile-unit">ms</div>
+        </div>
+
+        <div class="metric-tile" id="tile-hf-A">
+          <div class="tile-label">RSA proxy (HF)</div>
+          <div class="tile-value" id="hf-val-A">—</div>
+          <div class="tile-unit">ms²/Hz</div>
+        </div>
+
+        <div class="metric-tile" id="tile-resp-A">
+          <div class="tile-label">respiration (derived)</div>
+          <div class="tile-value" id="resp-val-A">—</div>
+          <div class="tile-unit">br/min</div>
+        </div>
+
+        <div class="metric-tile" id="tile-coh-A">
+          <div class="tile-label">coherence</div>
+          <div class="tile-value" id="coh-val-A">—</div>
+          <div class="coherence-bar-wrap">
+            <div class="coherence-bar-fill" id="coh-bar-A"></div>
+          </div>
+        </div>
+
+      </div><!-- /metric-tiles -->
+    </section>
+
+    <!-- ── Partner B ──────────────────────────────────────────────────── -->
+    <section class="partner-panel" id="panel-B" aria-label="Partner B physiological state">
+      <div class="partner-header">
+        <span class="partner-name b" id="name-B">Partner B</span>
+        <span class="state-badge regulated" id="state-badge-B">regulated</span>
+      </div>
+
+      <!-- activation score + state description -->
+      <div class="activation-row">
+        <span class="activation-score" id="act-score-B">—</span>
+        <span class="activation-unit">/ 100</span>
+        <span class="activation-direction" id="act-dir-B"></span>
+      </div>
+      <p class="state-description" id="state-desc-B"></p>
+
+      <!-- hero HR -->
+      <div class="hr-hero">
+        <span class="hr-value" id="hr-value-B">—</span>
+        <span class="hr-unit">bpm</span>
+      </div>
+      <div class="hr-delta" id="hr-delta-B">baseline not set</div>
+
+      <!-- sparkline -->
+      <canvas class="sparkline-canvas" id="sparkline-B"
+              aria-label="Heart rate trace for Partner B"></canvas>
+
+      <!-- metric tiles -->
+      <div class="metric-tiles">
+
+        <div class="metric-tile" id="tile-rmssd-B">
+          <div class="tile-label">RMSSD</div>
+          <div class="tile-value" id="rmssd-val-B">—</div>
+          <div class="tile-unit">ms</div>
+        </div>
+
+        <div class="metric-tile" id="tile-hf-B">
+          <div class="tile-label">RSA proxy (HF)</div>
+          <div class="tile-value" id="hf-val-B">—</div>
+          <div class="tile-unit">ms²/Hz</div>
+        </div>
+
+        <div class="metric-tile" id="tile-resp-B">
+          <div class="tile-label">respiration (derived)</div>
+          <div class="tile-value" id="resp-val-B">—</div>
+          <div class="tile-unit">br/min</div>
+        </div>
+
+        <div class="metric-tile" id="tile-coh-B">
+          <div class="tile-label">coherence</div>
+          <div class="tile-value" id="coh-val-B">—</div>
+          <div class="coherence-bar-wrap">
+            <div class="coherence-bar-fill" id="coh-bar-B"></div>
+          </div>
+        </div>
+
+      </div><!-- /metric-tiles -->
+    </section>
+
+  </div><!-- /partner-row -->
+
+  <!-- ── dyadic coupling panel ────────────────────────────────────────── -->
+  <section class="dyadic-panel" aria-label="Dyadic coupling — exploratory layer">
+    <div class="dyadic-header">
+      <span class="dyadic-title">dyadic coupling</span>
+      <span class="dyadic-tag">exploratory layer</span>
+    </div>
+
+    <div class="dyadic-stats">
+      <div class="dyadic-stat">
+        <span class="dyadic-stat-label">peak r</span>
+        <span class="dyadic-stat-value" id="dyadic-r">—</span>
+      </div>
+      <div class="dyadic-stat">
+        <span class="dyadic-stat-label">lag / leader</span>
+        <span class="dyadic-stat-value" id="dyadic-lag">—</span>
+      </div>
+      <div class="dyadic-stat">
+        <span class="dyadic-stat-label">phase</span>
+        <span class="dyadic-stat-value" id="dyadic-phase">—</span>
+      </div>
+    </div>
+
+    <canvas class="dual-trace-canvas" id="dual-trace"
+            aria-label="Dual HR trace for both partners"></canvas>
+
+    <p class="dyadic-caveat">
+      Synchrony should be read against arousal: high coupling while both partners are flooded
+      means "locked in conflict," not co-regulation. Compare against a surrogate baseline
+      (non-partner pairings) before calling a value meaningful. These are exploratory signals,
+      not relationship verdicts.
+    </p>
+  </section>
+
+</main>
+
+<!-- ── footer ───────────────────────────────────────────────────────────── -->
+<footer class="session-footer" role="contentinfo">
+  physiological proxies — not emotion readouts. thresholds are personalized to this session.
+</footer>
+
+<script src="/static/app.js"></script>
+</body>
+</html>

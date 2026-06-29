@@ -198,6 +198,10 @@ function handleMessage(data) {
       }
       break;
 
+    case "transcript":
+      appendTranscriptEvent(data);
+      break;
+
     case "pong":
       break;
   }
@@ -509,6 +513,13 @@ function applyPartnerNames() {
   if (labelB)    labelB.textContent    = state.B.name;
   if (labelACoh) labelACoh.textContent = state.A.name;
   if (labelBCoh) labelBCoh.textContent = state.B.name;
+  // sync enrollment button labels and _speakerNames lookup
+  _speakerNames.A = state.A.name;
+  _speakerNames.B = state.B.name;
+  const enrollA = document.getElementById("enroll-name-A");
+  const enrollB = document.getElementById("enroll-name-B");
+  if (enrollA) enrollA.textContent = state.A.name;
+  if (enrollB) enrollB.textContent = state.B.name;
 }
 
 function updateBaselineIndicator() {
@@ -876,6 +887,295 @@ function onVolumeChange(val) {
   }
 }
 
+// ── transcript recording ──────────────────────────────────────────────────────
+
+let mediaRecorder    = null;
+let activeStream     = null;
+let recordingStartMs = null;
+let recClockInterval = null;
+let sendQueue        = Promise.resolve();
+let isRecording      = false;
+
+function toggleRecording() {
+  if (isRecording) {
+    stopRecording();
+  } else {
+    startRecording();
+  }
+}
+
+function startRecording() {
+  if (isRecording) return;
+  if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+    setMicError("mic not supported in this browser");
+    return;
+  }
+  navigator.mediaDevices.getUserMedia({ audio: true })
+    .then((stream) => {
+      activeStream     = stream;
+      isRecording      = true;
+      recordingStartMs = Date.now();
+      recClockInterval = setInterval(updateMicUI, 1000);
+      updateMicUI();
+      startChunkCycle();
+    })
+    .catch((err) => {
+      console.error("[mic] getUserMedia failed:", err);
+      const msg = err.name === "NotAllowedError" ? "mic access denied"
+                : err.name === "NotFoundError"   ? "no mic found"
+                : "mic error";
+      setMicError(msg);
+    });
+}
+
+// ── voice enrollment ──────────────────────────────────────────────────────────
+
+const _speakerNames = { A: "Partner A", B: "Partner B", T: "Therapist" };
+
+function enrollVoice(partner) {
+  const btn = document.getElementById(`enroll-btn-${partner}`);
+  if (isRecording) {
+    // Flash the button with an explanation
+    if (btn) {
+      const prev = btn.textContent;
+      btn.textContent = "⚠ stop recording first";
+      setTimeout(() => { if (btn) btn.textContent = prev; }, 2500);
+    }
+    return;
+  }
+  if (btn) { btn.textContent = "⏺ recording…"; btn.disabled = true; }
+
+  navigator.mediaDevices.getUserMedia({ audio: true })
+    .then((stream) => {
+      const mr = new MediaRecorder(stream);
+      const chunks = [];
+      mr.ondataavailable = (e) => { if (e.data && e.data.size > 0) chunks.push(e.data); };
+      mr.onstop = async () => {
+        stream.getTracks().forEach(t => t.stop());
+        const blob = new Blob(chunks, { type: mr.mimeType || "audio/webm" });
+        try {
+          const res = await fetch(`/api/enroll/${partner}`, {
+            method: "POST",
+            headers: { "Content-Type": blob.type },
+            body: blob,
+          });
+          const data = await res.json();
+          if (data.ok) {
+            _speakerNames[partner] = data.name;
+            if (btn) {
+              btn.textContent = `✓ ${data.name}`;
+              btn.classList.add("enrolled");
+              btn.disabled = true;
+            }
+          } else {
+            if (btn) { btn.textContent = `enroll ${_speakerNames[partner]}`; btn.disabled = false; }
+          }
+        } catch (err) {
+          console.error("[enroll]", err);
+          if (btn) { btn.textContent = `enroll ${_speakerNames[partner]}`; btn.disabled = false; }
+        }
+      };
+      mr.start();
+      setTimeout(() => { if (mr.state !== "inactive") mr.stop(); }, 4000);
+    })
+    .catch((err) => {
+      console.error("[enroll] getUserMedia failed:", err);
+      if (btn) { btn.textContent = `enroll ${_speakerNames[partner]}`; btn.disabled = false; }
+    });
+}
+
+function showTranscribingBadge(on) {
+  const el = document.getElementById("transcript-mic-status");
+  if (!el) return;
+  el.textContent = on ? "transcribing…" : (isRecording ? "recording" : "mic off");
+  el.className   = "transcript-status" + (on || isRecording ? " recording" : "");
+}
+
+function setMicError(msg) {
+  const btn = document.getElementById("btn-mic");
+  if (btn) { btn.textContent = `⚠ ${msg}`; btn.classList.remove("recording"); }
+  setTimeout(() => {
+    if (!isRecording && btn) btn.textContent = "● record";
+  }, 4000);
+}
+
+function stopRecording() {
+  isRecording = false;
+  if (mediaRecorder && mediaRecorder.state !== "inactive") {
+    mediaRecorder.stop();
+  }
+  if (activeStream) {
+    activeStream.getTracks().forEach(t => t.stop());
+    activeStream = null;
+  }
+  if (recClockInterval) {
+    clearInterval(recClockInterval);
+    recClockInterval = null;
+  }
+  updateMicUI();
+}
+
+function startChunkCycle() {
+  if (!isRecording || !activeStream) return;
+  // New MediaRecorder per cycle — each instance produces its own WebM EBML
+  // header, making every blob independently decodable by ffmpeg.
+  const mr = new MediaRecorder(activeStream);
+  mediaRecorder = mr;
+  let chunks = [];
+
+  mr.ondataavailable = (e) => {
+    if (e.data && e.data.size > 0) chunks.push(e.data);
+  };
+
+  mr.onstop = () => {
+    if (chunks.length > 0) {
+      const blob = new Blob(chunks, { type: mr.mimeType || "audio/webm" });
+      console.log(`[mic] chunk: ${blob.size} bytes  type=${blob.type}`);
+      showTranscribingBadge(true);
+      sendQueue = sendQueue
+        .then(() => sendAudioChunk(blob))
+        .then(() => showTranscribingBadge(false))
+        .catch((err) => { console.error(err); showTranscribingBadge(false); });
+    }
+    if (isRecording) startChunkCycle();
+  };
+
+  mr.start();
+  setTimeout(() => {
+    if (mr.state !== "inactive") mr.stop();
+  }, 5_000);
+}
+
+async function sendAudioChunk(blob) {
+  try {
+    const res = await fetch("/api/transcribe", {
+      method: "POST",
+      headers: { "Content-Type": blob.type || "audio/webm" },
+      body: blob,
+    });
+    if (!res.ok) throw new Error(`transcribe ${res.status}`);
+    const data = await res.json();
+    // Update UI directly from the HTTP response — don't wait for the WS
+    // broadcast (which may arrive later or be deduplicated by _seenSeqs).
+    if (data.text) appendTranscriptEvent(data);
+    return data;
+  } catch (err) {
+    console.error("[transcribe]", err);
+  }
+}
+
+function updateMicUI() {
+  const btn       = document.getElementById("btn-mic");
+  const statusEl  = document.getElementById("rec-status");
+  const badgeEl   = document.getElementById("transcript-mic-status");
+
+  if (isRecording) {
+    if (btn) { btn.textContent = "◼ stop"; btn.classList.add("recording"); }
+    if (statusEl) {
+      statusEl.hidden = false;
+      const elapsed = recordingStartMs ? Math.floor((Date.now() - recordingStartMs) / 1000) : 0;
+      const m  = String(Math.floor(elapsed / 60)).padStart(2, "0");
+      const s  = String(elapsed % 60).padStart(2, "0");
+      statusEl.textContent = `rec ${m}:${s}`;
+    }
+    if (badgeEl) { badgeEl.textContent = "recording"; badgeEl.classList.add("recording"); }
+  } else {
+    if (btn) { btn.textContent = "● record"; btn.classList.remove("recording"); }
+    if (statusEl) { statusEl.hidden = true; statusEl.textContent = ""; }
+    if (badgeEl) { badgeEl.textContent = "mic off"; badgeEl.classList.remove("recording"); }
+  }
+}
+
+function escapeHtml(s) {
+  return s
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;");
+}
+
+const _seenSeqs = new Set();
+
+function appendTranscriptEvent(data) {
+  // Deduplicate: HTTP response and WS broadcast carry the same seq number
+  if (data.seq !== undefined) {
+    if (_seenSeqs.has(data.seq)) return;
+    _seenSeqs.add(data.seq);
+  }
+
+  const emptyEl    = document.getElementById("transcript-empty");
+  const scrollEl   = document.getElementById("transcript-scroll");
+  const downloadBtn = document.getElementById("btn-download-session");
+  if (!scrollEl) return;
+
+  if (emptyEl)    emptyEl.hidden = true;
+  if (downloadBtn) downloadBtn.hidden = false;
+
+  const elapsed = data.session_elapsed_s ?? 0;
+  const m  = String(Math.floor(elapsed / 60)).padStart(2, "0");
+  const s  = String(Math.floor(elapsed % 60)).padStart(2, "0");
+  const timestamp = `${m}:${s}`;
+
+  const metrics = data.metrics || {};
+  const mA = metrics.A || {};
+  const mB = metrics.B || {};
+
+  const describePartner = (m, name) => {
+    if (m.activation === null || m.activation === undefined) return null;
+    const act = Math.round(m.activation);
+    const zone = act >= 65 ? "high activation" : act >= 35 ? "moderate" : "calm";
+    const flooded = m.flooded ? ", flooded" : "";
+    return `${name}: ${act} activation, ${zone}${flooded}`;
+  };
+
+  const parts = [];
+  const pA = describePartner(mA, state.A.name || "A");
+  const pB = describePartner(mB, state.B.name || "B");
+  if (pA) parts.push(pA);
+  if (pB && !singlePartnerMode) parts.push(pB);
+
+  const speaker = data.speaker || null;   // "A", "B", "T", or null
+  const speakerName = speaker ? (_speakerNames[speaker] || speaker) : null;
+  const isTherapist = speaker === "T";
+
+  // Physio line: shown for A/B speakers (or unknown), suppressed for Therapist
+  const showPhysio = !isTherapist && parts.length > 0;
+
+  const entry = document.createElement("div");
+  entry.className = "transcript-entry";
+  entry.innerHTML =
+    (speakerName
+      ? `<div class="transcript-speaker speaker-${speaker}">${escapeHtml(speakerName)}</div>`
+      : "") +
+    `<div class="transcript-time">${timestamp}</div>` +
+    `<div class="transcript-text">${escapeHtml(data.text || "")}</div>` +
+    (showPhysio
+      ? `<div class="transcript-physio">${escapeHtml(parts.join(" · "))}</div>`
+      : "");
+
+  scrollEl.appendChild(entry);
+  scrollEl.scrollTop = scrollEl.scrollHeight;
+}
+
+async function downloadSession() {
+  try {
+    const res = await fetch("/api/session_download");
+    if (!res.ok) { console.error("download failed", res.status); return; }
+    const disposition = res.headers.get("Content-Disposition") || "";
+    const match = disposition.match(/filename="([^"]+)"/);
+    const filename = match ? match[1] : "session.json";
+    const blob = await res.blob();
+    const url  = URL.createObjectURL(blob);
+    const a    = document.createElement("a");
+    a.href = url; a.download = filename;
+    document.body.appendChild(a); a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  } catch (err) {
+    console.error("[download]", err);
+  }
+}
+
 // ── dark mode ─────────────────────────────────────────────────────────────────
 
 function toggleDarkMode() {
@@ -1000,6 +1300,9 @@ document.addEventListener("DOMContentLoaded", () => {
         break;
       case "d":
         toggleDarkMode();
+        break;
+      case "m":
+        toggleRecording();
         break;
     }
   });

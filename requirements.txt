@@ -3,3 +3,5 @@ matplotlib>=3.7.0
 numpy>=1.24.0
 aiohttp>=3.9.0
 scipy>=1.11.0
+openai-whisper>=20231117
+resemblyzer>=0.1.4

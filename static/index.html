@@ -22,6 +22,8 @@
   <button class="btn btn-clear" id="btn-clear-A" onclick="clearBaseline('A')" hidden>clear — A</button>
   <button class="btn" id="btn-baseline-B" onclick="setBaseline('B')">set baseline — B</button>
   <button class="btn btn-clear" id="btn-clear-B" onclick="clearBaseline('B')" hidden>clear — B</button>
+  <button class="btn btn-mic" id="btn-mic" onclick="toggleRecording()">● record</button>
+  <span class="rec-status" id="rec-status" aria-live="polite" hidden></span>
   <a href="/mode_b" class="btn btn-calm">recovery mode →</a>
   <button class="btn btn-theme" id="btn-theme" onclick="toggleDarkMode()" title="toggle dark mode">◐</button>
 </header>
@@ -203,12 +205,34 @@
     </p>
   </section>
 
+  <!-- ── session transcript ────────────────────────────────────────────── -->
+  <section class="transcript-panel" id="transcript-panel" aria-label="Session transcript">
+    <div class="transcript-header">
+      <span class="transcript-title">session transcript</span>
+      <span class="transcript-status" id="transcript-mic-status">mic off</span>
+      <button class="btn" id="btn-download-session"
+              onclick="downloadSession()" hidden>↓ download log</button>
+      <div class="enroll-row" id="enroll-row">
+        <span class="enroll-label">voice enrollment:</span>
+        <button class="btn btn-enroll" id="enroll-btn-A" onclick="enrollVoice('A')">enroll <span id="enroll-name-A">Partner A</span></button>
+        <button class="btn btn-enroll" id="enroll-btn-B" onclick="enrollVoice('B')">enroll <span id="enroll-name-B">Partner B</span></button>
+        <button class="btn btn-enroll" id="enroll-btn-T" onclick="enrollVoice('T')">enroll <span id="enroll-name-T">Therapist</span></button>
+        <span class="enroll-hint">each person speaks alone for ~4 s</span>
+      </div>
+    </div>
+    <p class="transcript-empty" id="transcript-empty">
+      Press <kbd>● record</kbd> to begin annotating the session.
+    </p>
+    <div class="transcript-scroll" id="transcript-scroll"
+         role="log" aria-live="polite" aria-relevant="additions"></div>
+  </section>
+
 </main>
 
 <!-- ── footer ───────────────────────────────────────────────────────────── -->
 <footer class="session-footer" role="contentinfo">
   physiological proxies — not emotion readouts. thresholds are personalized to this session.
-  <span class="kbd-hints">b set baseline · r recovery mode · d dark mode</span>
+  <span class="kbd-hints">b set baseline · r recovery mode · d dark mode · m mic</span>
   <span class="kbd-hints"><a href="/whitepaper" target="_blank" style="color:inherit;">technical whitepaper ↗</a></span>
 </footer>
 

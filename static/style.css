@@ -809,6 +809,178 @@ body.mode-b {
 }
 .back-link:hover { border-bottom-color: var(--calm); }
 
+/* ── transcript panel (session log with physiological annotation) ─── */
+.transcript-panel {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 16px;
+  margin-bottom: var(--gap);
+}
+
+.transcript-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 12px;
+}
+
+.transcript-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text);
+  margin-right: auto;
+}
+
+.transcript-status {
+  font-size: 11px;
+  padding: 2px 9px;
+  border-radius: 20px;
+  background: var(--border);
+  color: var(--text-secondary);
+  border: 1px solid var(--border);
+}
+.transcript-status.recording {
+  background: var(--danger-light);
+  color: var(--danger);
+  border-color: var(--danger);
+}
+
+.transcript-empty {
+  font-size: 13px;
+  color: var(--text-secondary);
+  font-style: italic;
+  text-align: center;
+  padding: 20px 0;
+}
+
+.transcript-scroll {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-height: 340px;
+  overflow-y: auto;
+  scrollbar-width: thin;
+  scrollbar-color: var(--border) transparent;
+}
+
+.transcript-entry {
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--calm);
+  border-radius: var(--radius);
+  padding: 8px 10px;
+}
+
+.transcript-time {
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-secondary);
+  margin-bottom: 3px;
+}
+
+.transcript-text {
+  font-size: 14px;
+  color: var(--text);
+  line-height: 1.5;
+  margin-bottom: 4px;
+}
+
+.transcript-physio {
+  font-size: 11px;
+  color: var(--text-secondary);
+  font-style: italic;
+  line-height: 1.4;
+}
+
+/* voice enrollment row */
+.enroll-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px solid var(--border);
+}
+
+.enroll-label {
+  font-size: 11px;
+  color: var(--text-secondary);
+  white-space: nowrap;
+}
+
+.btn-enroll {
+  font-size: 11px;
+  padding: 3px 10px;
+}
+
+.btn-enroll.enrolled {
+  color: var(--calm);
+  border-color: var(--calm);
+  cursor: default;
+}
+
+.enroll-hint {
+  font-size: 10px;
+  color: var(--text-secondary);
+  font-style: italic;
+  margin-left: auto;
+}
+
+/* speaker attribution badges */
+.transcript-speaker {
+  display: inline-block;
+  font-size: 10px;
+  font-weight: 600;
+  padding: 1px 7px;
+  border-radius: 10px;
+  margin-bottom: 4px;
+  text-transform: lowercase;
+  letter-spacing: 0.02em;
+}
+.transcript-speaker.speaker-A {
+  background: color-mix(in srgb, var(--partner-a) 15%, transparent);
+  color: var(--partner-a);
+  border: 1px solid color-mix(in srgb, var(--partner-a) 30%, transparent);
+}
+.transcript-speaker.speaker-B {
+  background: color-mix(in srgb, var(--partner-b) 15%, transparent);
+  color: var(--partner-b);
+  border: 1px solid color-mix(in srgb, var(--partner-b) 30%, transparent);
+}
+.transcript-speaker.speaker-T {
+  background: #f0eaf8;
+  color: #7d5fb5;
+  border: 1px solid #c9b8e8;
+}
+[data-theme="dark"] .transcript-speaker.speaker-T {
+  background: #2a1f3d;
+  color: #b89de8;
+  border-color: #5a3f8a;
+}
+
+/* mic button */
+.btn-mic {
+  background: var(--bg);
+  border-color: var(--border);
+  color: var(--text);
+}
+.btn-mic.recording {
+  background: var(--danger-light);
+  border-color: var(--danger);
+  color: var(--danger);
+}
+.btn-mic.recording:hover {
+  background: var(--danger-light);
+}
+
+.rec-status {
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  color: var(--danger);
+}
+
 /* ── reduced motion ──────────────────────────────────────────────────── */
 @media (prefers-reduced-motion: reduce) {
   .breath-circle { transform: scale(0.78); opacity: 0.9; }

@@ -57,9 +57,8 @@ async def main():
     proc_a = PartnerProcessor(names[0], "A")
     proc_b = PartnerProcessor(names[1], "B") if len(names) > 1 else None
 
-    server = BiofeedbackServer(proc_a, proc_b, port=args.port)
-
     if args.simulate:
+        server = BiofeedbackServer(proc_a, proc_b, port=args.port)
         from simulator import simulate_stream
 
         async def sim_a():
@@ -87,6 +86,7 @@ async def main():
             asyncio.create_task(sim_b())
 
     elif args.addresses:
+        server = BiofeedbackServer(proc_a, proc_b, port=args.port)
         from ble import stream as ble_stream
         from battery import read_battery_once
 
@@ -123,100 +123,9 @@ async def main():
             asyncio.create_task(ble_b())
 
     else:
-        # No addresses provided — scan interactively
-        from ble import scan_for_hr_monitors, stream as ble_stream
-        from battery import read_battery_once
-
-        n_needed = 2 if proc_b else 1
-        print(f"Scanning for heart rate monitor(s) (10 s) …")
-        print("Make sure sensor(s) are powered on and worn.\n")
-        devices = await scan_for_hr_monitors(timeout=10.0)
-
-        if not devices:
-            print("No heart rate monitors found.")
-            print("Tip: run  python3 scan.py  to debug discovery, or use  --simulate  for testing.")
-            sys.exit(1)
-
-        if len(devices) < n_needed:
-            print(f"Found {len(devices)} device(s) but {n_needed} needed.")
-            print("Power on all sensors and retry, or use --simulate for testing.")
-            sys.exit(1)
-
-        print(f"Found {len(devices)} device(s):\n")
-        for i, d in enumerate(devices):
-            print(f"  [{i}]  {d.name or 'Unknown':<30}  {d.address}")
-
-        addr_a = None
-        addr_b = None
-
-        if len(devices) == n_needed:
-            # exact match — auto-assign without prompting
-            addr_a = devices[0].address
-            addr_b = devices[1].address if proc_b else None
-            print(f"\nAuto-assigning:")
-            print(f"  {names[0]:<20} → {devices[0].name or devices[0].address}")
-            if addr_b:
-                print(f"  {names[1]:<20} → {devices[1].name or devices[1].address}")
-        else:
-            # more devices found than needed — let user pick
-            print()
-            try:
-                raw_a = input("Select index for Partner A: ").strip()
-                idx_a = int(raw_a)
-                if not (0 <= idx_a < len(devices)):
-                    raise ValueError
-            except (ValueError, EOFError):
-                print("Invalid selection. Exiting.")
-                sys.exit(1)
-
-            addr_a = devices[idx_a].address
-
-            if proc_b:
-                try:
-                    raw_b = input("Select index for Partner B: ").strip()
-                    idx_b = int(raw_b)
-                    if idx_b == idx_a or not (0 <= idx_b < len(devices)):
-                        raise ValueError
-                except (ValueError, EOFError):
-                    print("Invalid selection. Exiting.")
-                    sys.exit(1)
-                addr_b = devices[idx_b].address
-
-            print(f"\nConnecting  {names[0]} → {addr_a}")
-            if addr_b:
-                print(f"            {names[1]} → {addr_b}")
-
-        print()
-
-        batt_a = await read_battery_once(addr_a)
-        if batt_a is not None:
-            server.on_battery(0, batt_a)
-
-        async def ble_a():
-            await ble_stream(
-                address=addr_a, name=names[0],
-                on_bpm=lambda bpm: server.on_bpm(0, bpm),
-                on_rr=lambda rr: server.on_rr(0, rr),
-                on_connect=lambda label: (print(f"[ble] {label} connected"), server.on_sensor_connect(0)),
-                on_disconnect=lambda label, reason: (print(f"[ble] {label} disconnected: {reason}"), server.on_sensor_disconnect(0)),
-            )
-
-        asyncio.create_task(ble_a())
-
-        if addr_b:
-            batt_b = await read_battery_once(addr_b)
-            if batt_b is not None:
-                server.on_battery(1, batt_b)
-
-            async def ble_b():
-                await ble_stream(
-                    address=addr_b, name=names[1],
-                    on_bpm=lambda bpm: server.on_bpm(1, bpm),
-                    on_rr=lambda rr: server.on_rr(1, rr),
-                    on_connect=lambda label: (print(f"[ble] {label} connected"), server.on_sensor_connect(1)),
-                    on_disconnect=lambda label, reason: (print(f"[ble] {label} disconnected: {reason}"), server.on_sensor_disconnect(1)),
-                )
-            asyncio.create_task(ble_b())
+        # Setup mode: browser dialog handles scanning and device assignment
+        server = BiofeedbackServer(proc_a, proc_b, port=args.port, setup_mode=True)
+        print(f"Open http://localhost:{args.port}/ to configure the session.")
 
     # open browser after a short delay
     async def open_browser():

@@ -453,12 +453,14 @@ function drawActivationTrace(canvas, values) {
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
   ctx.clearRect(0, 0, W, H);
 
-  const toY = (v) => H - (Math.min(Math.max(v, 0), 100) / 100) * H;
+  const BOTTOM_PAD = 16;
+  const chartH = H - BOTTOM_PAD;
+  const toY = (v) => chartH - (Math.min(Math.max(v, 0), 100) / 100) * chartH;
 
   // zone bands (low / moderate / high)
-  ctx.fillStyle = "#fdecea"; ctx.fillRect(0, 0,        W, toY(65));           // high — red tint
-  ctx.fillStyle = "#fef5e7"; ctx.fillRect(0, toY(65),  W, toY(35) - toY(65)); // moderate — amber tint
-  ctx.fillStyle = "#d5f5f0"; ctx.fillRect(0, toY(35),  W, H - toY(35));       // low — calm tint
+  ctx.fillStyle = "#fdecea"; ctx.fillRect(0, 0,        W, toY(65));               // high — red tint
+  ctx.fillStyle = "#fef5e7"; ctx.fillRect(0, toY(65),  W, toY(35) - toY(65));     // moderate — amber tint
+  ctx.fillStyle = "#d5f5f0"; ctx.fillRect(0, toY(35),  W, chartH - toY(35));      // low — calm tint
 
   // zone dividers
   ctx.strokeStyle = "rgba(0,0,0,0.08)";
@@ -473,9 +475,9 @@ function drawActivationTrace(canvas, values) {
 
   if (!values || values.length < 2) return;
 
-  // Fixed window: 120 points ≈ 10 min at ~5 s/slow cycle.
-  // Points anchor to the left so the trace grows rightward as data accumulates.
-  const MAX_POINTS = 120;
+  // Fixed window: 18 points ≈ 3 min at 10 s/slow cycle.
+  // Points anchor left; trace grows rightward as data accumulates.
+  const MAX_POINTS = 18;
   const toX = (i) => (i / (MAX_POINTS - 1)) * W;
 
   ctx.beginPath();
@@ -493,6 +495,21 @@ function drawActivationTrace(canvas, values) {
   ctx.arc(toX(values.length - 1), toY(last), 4, 0, Math.PI * 2);
   ctx.fillStyle = dotColor;
   ctx.fill();
+
+  // x-axis time labels
+  const xLabels = [
+    { label: "−3m", x: toX(0),              align: "left"   },
+    { label: "−2m", x: toX(6),              align: "center" },
+    { label: "−1m", x: toX(12),             align: "center" },
+    { label: "now",      x: toX(MAX_POINTS - 1), align: "right"  },
+  ];
+  ctx.font = "10px sans-serif";
+  ctx.fillStyle = "rgba(0,0,0,0.4)";
+  ctx.textBaseline = "top";
+  for (const { label, x, align } of xLabels) {
+    ctx.textAlign = align;
+    ctx.fillText(label, x, chartH + 3);
+  }
 }
 
 function redrawActivationTrace(p) {
@@ -1246,6 +1263,116 @@ function applyReducedMotion() {
   }
 }
 
+// ── setup overlay ─────────────────────────────────────────────────────────────
+
+let _scannedDevices = [];
+
+async function scanDevices() {
+  const statusEl = document.getElementById("scan-status");
+  const btn      = document.getElementById("btn-scan");
+  btn.disabled   = true;
+  btn.textContent = "scanning… (10s)";
+  statusEl.textContent = "";
+
+  try {
+    const res     = await fetch("/api/scan");
+    const devices = await res.json();
+    if (devices.error) throw new Error(devices.error);
+    _scannedDevices = devices;
+
+    ["A", "B"].forEach((p, i) => {
+      const sel = document.getElementById(`setup-device-${p}`);
+      sel.innerHTML = p === "B"
+        ? '<option value="">— none —</option>'
+        : '<option value="">— select device —</option>';
+      devices.forEach(d => {
+        const opt = document.createElement("option");
+        opt.value = d.address;
+        opt.textContent = d.name ? `${d.name}  (${d.address})` : d.address;
+        sel.appendChild(opt);
+      });
+      // auto-select if exactly 2 devices found
+      if (devices.length === 2) sel.value = devices[i]?.address ?? "";
+    });
+
+    statusEl.textContent = `${devices.length} device${devices.length !== 1 ? "s" : ""} found`;
+    document.getElementById("btn-start").disabled = devices.length === 0;
+  } catch (e) {
+    statusEl.textContent = "scan failed — check that sensors are powered on";
+  } finally {
+    btn.disabled = false;
+    btn.textContent = "scan for devices";
+  }
+}
+
+async function startSession() {
+  const nameA = (document.getElementById("setup-name-A").value.trim()) || "Partner A";
+  const nameB = (document.getElementById("setup-name-B").value.trim()) || "Partner B";
+  const addrA = document.getElementById("setup-device-A").value;
+  const addrB = document.getElementById("setup-device-B").value;
+  const errorEl = document.getElementById("setup-error");
+
+  if (!addrA) {
+    errorEl.textContent = "Select a device for Partner A.";
+    errorEl.hidden = false;
+    return;
+  }
+  errorEl.hidden = true;
+
+  const btn = document.getElementById("btn-start");
+  btn.disabled = true;
+  btn.textContent = "connecting…";
+
+  const partners = [{ idx: 0, name: nameA, address: addrA }];
+  if (addrB) partners.push({ idx: 1, name: nameB, address: addrB });
+
+  try {
+    const res  = await fetch("/api/configure", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ simulate: false, partners }),
+    });
+    const data = await res.json();
+    if (data.ok) {
+      document.getElementById("setup-overlay").hidden = true;
+    } else {
+      errorEl.textContent = data.error || "Configuration failed.";
+      errorEl.hidden = false;
+      btn.disabled = false;
+      btn.textContent = "start session";
+    }
+  } catch (e) {
+    errorEl.textContent = "Connection error — is the server running?";
+    errorEl.hidden = false;
+    btn.disabled = false;
+    btn.textContent = "start session";
+  }
+}
+
+async function startSimulated() {
+  const nameA = (document.getElementById("setup-name-A").value.trim()) || "Partner A";
+  const nameB = (document.getElementById("setup-name-B").value.trim()) || "Partner B";
+  try {
+    const res = await fetch("/api/configure", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ simulate: true, names: [nameA, nameB], bpm: [68, 75] }),
+    });
+    const data = await res.json();
+    if (data.ok) document.getElementById("setup-overlay").hidden = true;
+  } catch (e) { /* ignore — dialog stays open */ }
+}
+
+async function checkSetupNeeded() {
+  const overlay = document.getElementById("setup-overlay");
+  if (!overlay) return;
+  try {
+    const res  = await fetch("/api/state");
+    const data = await res.json();
+    if (!data.configured) overlay.hidden = false;
+  } catch (e) { /* server not ready yet — overlay stays hidden */ }
+}
+
 // ── init ──────────────────────────────────────────────────────────────────────
 
 document.addEventListener("DOMContentLoaded", () => {
@@ -1258,6 +1385,7 @@ document.addEventListener("DOMContentLoaded", () => {
   }
 
   applyReducedMotion();
+  checkSetupNeeded();
   connectWS();
   startSessionClock();   // no-op if element absent (Mode B)
   startBreakClock();     // no-op if element absent (Mode A)

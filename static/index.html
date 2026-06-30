@@ -236,6 +236,48 @@
   <span class="kbd-hints"><a href="/whitepaper" target="_blank" style="color:inherit;">technical whitepaper ↗</a></span>
 </footer>
 
+<!-- ── setup overlay ────────────────────────────────────────────────────── -->
+<div id="setup-overlay" class="setup-overlay" hidden>
+  <div class="setup-card">
+    <h2 class="setup-title">session setup</h2>
+    <p class="setup-subtitle">Power on your heart rate monitors, then scan to discover them.</p>
+
+    <button class="btn btn-scan" id="btn-scan" onclick="scanDevices()">scan for devices</button>
+    <span class="scan-status" id="scan-status"></span>
+
+    <div class="setup-partners">
+
+      <div class="setup-partner">
+        <span class="setup-partner-label a">Partner A</span>
+        <input type="text" class="setup-name-input" id="setup-name-A"
+               placeholder="Name" value="Partner A" />
+        <select class="setup-device-select" id="setup-device-A">
+          <option value="">— scan first —</option>
+        </select>
+      </div>
+
+      <div class="setup-partner">
+        <span class="setup-partner-label b">Partner B</span>
+        <input type="text" class="setup-name-input" id="setup-name-B"
+               placeholder="Name (optional)" value="Partner B" />
+        <select class="setup-device-select" id="setup-device-B">
+          <option value="">— none —</option>
+        </select>
+      </div>
+
+    </div>
+
+    <p class="setup-error" id="setup-error" hidden></p>
+
+    <div class="setup-actions">
+      <button class="btn btn-primary" id="btn-start" onclick="startSession()" disabled>
+        start session
+      </button>
+      <button class="btn btn-simulate" onclick="startSimulated()">simulate</button>
+    </div>
+  </div>
+</div>
+
 <script src="/static/app.js"></script>
 </body>
 </html>

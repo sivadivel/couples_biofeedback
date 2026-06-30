@@ -996,3 +996,123 @@ body.mode-b {
 @media (max-width: 600px) {
   .metric-tiles { grid-template-columns: repeat(2, 1fr); }
 }
+
+/* ── setup overlay ───────────────────────────────────────────────────── */
+.setup-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.55);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+}
+.setup-overlay[hidden] { display: none; }
+
+.setup-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 32px 36px;
+  width: 480px;
+  max-width: calc(100vw - 32px);
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  box-shadow: 0 8px 32px rgba(0,0,0,0.18);
+}
+
+.setup-title {
+  font-size: 20px;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.setup-subtitle {
+  font-size: 13px;
+  color: var(--text-secondary);
+  margin-top: -12px;
+}
+
+.btn-scan {
+  align-self: flex-start;
+}
+
+.scan-status {
+  font-size: 12px;
+  color: var(--text-secondary);
+  align-self: center;
+}
+
+.setup-partners {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.setup-partner {
+  display: grid;
+  grid-template-columns: 72px 1fr 1fr;
+  align-items: center;
+  gap: 10px;
+}
+
+.setup-partner-label {
+  font-size: 13px;
+  font-weight: 600;
+}
+.setup-partner-label.a { color: var(--partner-a); }
+.setup-partner-label.b { color: var(--partner-b); }
+
+.setup-name-input {
+  padding: 6px 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  font-size: 13px;
+  font-family: var(--font);
+  background: var(--bg);
+  color: var(--text);
+}
+.setup-name-input:focus {
+  outline: none;
+  border-color: var(--calm);
+}
+
+.setup-device-select {
+  padding: 6px 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  font-size: 12px;
+  font-family: var(--font);
+  background: var(--bg);
+  color: var(--text);
+  cursor: pointer;
+}
+
+.setup-error {
+  font-size: 12px;
+  color: var(--danger);
+}
+.setup-error[hidden] { display: none; }
+
+.setup-actions {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+}
+
+.btn-primary {
+  background: var(--calm);
+  color: #fff;
+  border: none;
+}
+.btn-primary:hover:not(:disabled) { background: #138a72; }
+.btn-primary:disabled { opacity: 0.45; cursor: default; }
+
+.btn-simulate {
+  background: none;
+  border: 1px solid var(--border);
+  color: var(--text-secondary);
+  font-size: 12px;
+}
+.btn-simulate:hover { border-color: var(--text-secondary); color: var(--text); }

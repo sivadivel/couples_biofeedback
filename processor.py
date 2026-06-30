@@ -58,7 +58,7 @@ def _resp_rate_from_rr(rr_ms: np.ndarray) -> float:
 
 
 def activation_state(
-    metrics: dict, baseline: Baseline, prev: float | None = None, alpha: float = 0.3
+    metrics: dict, baseline: Baseline, prev: float | None = None, alpha: float = 0.5
 ) -> dict:
     """
     0–100 activation score per spec §4.5.
@@ -178,6 +178,7 @@ class PartnerProcessor:
         self._prev_activation: float | None = None
         self._session_start = time.monotonic()
         self._calm_start_ts: float | None = None
+        self._flood_count: int = 0  # consecutive mid-cycles above threshold
 
     # ── ingest ────────────────────────────────────────────────────────────────
 
@@ -256,7 +257,11 @@ class PartnerProcessor:
                     if self.baseline is not None and "mean_hr" in self.baseline.stats:
                         bl_hr = self.baseline.stats["mean_hr"][0]
                         dpa_res = dpa_flag(mean_hr, bl_hr)
-                        flooded = dpa_res["flooded"]
+                        if dpa_res["flooded"]:
+                            self._flood_count += 1
+                        else:
+                            self._flood_count = 0
+                        flooded = self._flood_count >= 2
                         dpa = dpa_res
                         hr_baseline_pct = round(
                             100.0 * (mean_hr - bl_hr) / bl_hr, 1
@@ -307,7 +312,7 @@ class PartnerProcessor:
                             rel_t = now - self._session_start
                             self._trace_act.append(s["activation"])
                             self._trace_act_t.append(rel_t)
-                            cutoff_act = rel_t - 600.0
+                            cutoff_act = rel_t - 180.0
                             while self._trace_act_t and self._trace_act_t[0] < cutoff_act:
                                 self._trace_act_t.pop(0)
                                 self._trace_act.pop(0)

@@ -142,11 +142,13 @@ class BiofeedbackServer:
         proc_a: PartnerProcessor,
         proc_b: PartnerProcessor | None = None,
         port: int = 8765,
+        setup_mode: bool = False,
     ):
         self.proc_a = proc_a
         self.proc_b = proc_b
         self.dyadic = DyadicProcessor(proc_a.name, proc_b.name) if proc_b else None
         self.port = port
+        self._configured: bool = not setup_mode
         self.clients: set[web.WebSocketResponse] = set()
         self._loop: asyncio.AbstractEventLoop | None = None
         self._sensor_online: dict[int, bool] = {0: False, 1: False}
@@ -155,6 +157,7 @@ class BiofeedbackServer:
             k: None for k in (
                 "mean_hr", "rmssd", "hf", "coherence", "resp_rate",
                 "activation", "direction", "flooded", "calm_zone_s", "hr_baseline_pct",
+                "signal_quality", "confidence", "state_description",
             )
         }
         self._metrics_snapshot: dict = {
@@ -169,6 +172,8 @@ class BiofeedbackServer:
         self._session_start_mono: float | None = None
         self._whisper_model:      str = "base"
         self._metric_buffer:      deque = deque()  # (monotonic_time, snapshot_copy)
+        self._last_log_snapshot:  float = 0.0
+        self._prev_flooded:       dict[str, bool] = {"A": False, "B": False}
 
     # ── callbacks for BLE / simulator ────────────────────────────────────────
 
@@ -194,6 +199,8 @@ class BiofeedbackServer:
         if self._loop:
             msg = {"type": "sensor_status", "partner": partner, "online": True}
             self._loop.call_soon_threadsafe(asyncio.create_task, self.broadcast(msg))
+            self._loop.call_soon_threadsafe(self._open_session_log)
+            self._loop.call_soon_threadsafe(self._log_lifecycle, "sensor_connect", partner)
 
     def on_sensor_disconnect(self, idx: int) -> None:
         self._sensor_online[idx] = False
@@ -201,6 +208,7 @@ class BiofeedbackServer:
         if self._loop:
             msg = {"type": "sensor_status", "partner": partner, "online": False}
             self._loop.call_soon_threadsafe(asyncio.create_task, self.broadcast(msg))
+            self._loop.call_soon_threadsafe(self._log_lifecycle, "sensor_disconnect", partner)
 
     def on_battery(self, idx: int, level: int) -> None:
         partner = "A" if idx == 0 else "B"
@@ -275,6 +283,9 @@ class BiofeedbackServer:
                             "ok": ok,
                             "name": proc.name,
                         })
+                        if ok:
+                            self._open_session_log()
+                            self._log_lifecycle("baseline_set", partner)
                     elif mtype == "clear_baseline":
                         partner = data.get("partner", "A")
                         if partner == "B" and not self.proc_b:
@@ -287,6 +298,7 @@ class BiofeedbackServer:
                             "ok": False,
                             "name": proc.name,
                         })
+                        self._log_lifecycle("baseline_clear", partner)
                 elif msg.type in (WSMsgType.ERROR, WSMsgType.CLOSE):
                     break
         finally:
@@ -324,16 +336,26 @@ class BiofeedbackServer:
             snap = self._metrics_snapshot[p]
             snap["mean_hr"]         = msg.get("mean_hr")
             snap["rmssd"]           = msg.get("rmssd")
-            snap["flooded"]         = msg.get("flooded", False)
             snap["hr_baseline_pct"] = msg.get("hr_baseline_pct")
+            snap["signal_quality"]  = msg.get("signal_quality")
+            new_flooded = msg.get("flooded", False)
+            snap["flooded"] = new_flooded
+            if new_flooded != self._prev_flooded[p] and self._session_file is not None:
+                evt = "flood_start" if new_flooded else "flood_end"
+                self._log_lifecycle(evt, p,
+                    mean_hr=msg.get("mean_hr"),
+                    hr_baseline_pct=msg.get("hr_baseline_pct"))
+            self._prev_flooded[p] = new_flooded
         elif mtype == "slow" and p in ("A", "B"):
             snap = self._metrics_snapshot[p]
-            snap["hf"]         = msg.get("hf")
-            snap["coherence"]  = msg.get("coherence")
-            snap["resp_rate"]  = msg.get("resp_rate")
-            snap["activation"] = msg.get("activation")
-            snap["direction"]  = msg.get("direction")
-            snap["calm_zone_s"] = msg.get("calm_zone_s", 0)
+            snap["hf"]               = msg.get("hf")
+            snap["coherence"]        = msg.get("coherence")
+            snap["resp_rate"]        = msg.get("resp_rate")
+            snap["activation"]       = msg.get("activation")
+            snap["direction"]        = msg.get("direction")
+            snap["calm_zone_s"]      = msg.get("calm_zone_s", 0)
+            snap["confidence"]       = msg.get("confidence")
+            snap["state_description"] = msg.get("state_description")
         elif mtype == "dyadic":
             d = self._metrics_snapshot["dyadic"]
             d["peak_r"] = msg.get("peak_r")
@@ -385,6 +407,7 @@ class BiofeedbackServer:
         now_utc = datetime.now(timezone.utc)
         self._session_id = now_utc.strftime("%Y-%m-%dT%H-%M-%S")
         self._session_start_mono = time.monotonic()
+        self._last_log_snapshot  = time.monotonic()
         path = sessions_dir / f"{self._session_id}.ndjson"
         self._session_file = open(path, "w", buffering=1)  # line-buffered
         names = {
@@ -398,6 +421,19 @@ class BiofeedbackServer:
             "names": names,
         }
         self._session_file.write(json.dumps(header) + "\n")
+
+    def _log_lifecycle(self, event: str, partner: str | None = None, **extra) -> None:
+        if self._session_file is None:
+            return
+        rec: dict = {
+            "type":      "lifecycle",
+            "event":     event,
+            "wall_time": datetime.now(timezone.utc).isoformat(),
+        }
+        if partner is not None:
+            rec["partner"] = partner
+        rec.update(extra)
+        self._session_file.write(json.dumps(rec) + "\n")
 
     def _append_transcript_event(self, text: str, speaker: str | None = None) -> dict:
         self._open_session_log()
@@ -473,6 +509,8 @@ class BiofeedbackServer:
             return web.Response(status=500, content_type="application/json",
                                 text=json.dumps({"error": str(exc)}))
         self._voice_enrollments[partner] = embedding
+        self._open_session_log()
+        self._log_lifecycle("voice_enrolled", partner)
         if partner == "A":
             name = self.proc_a.name
         elif partner == "B":
@@ -494,6 +532,8 @@ class BiofeedbackServer:
         header_obj: dict | None = None
         events = []
         patches: dict[int, dict] = {}
+        snapshots = []
+        lifecycle_events = []
         with open(path) as f:
             for line in f:
                 line = line.strip()
@@ -509,15 +549,21 @@ class BiofeedbackServer:
                     events.append(obj)
                 elif obj.get("type") == "response_patch":
                     patches[obj["seq"]] = obj.get("response_metrics", {})
+                elif obj.get("type") == "metrics_snapshot":
+                    snapshots.append(obj)
+                elif obj.get("type") == "lifecycle":
+                    lifecycle_events.append(obj)
         for ev in events:
             if ev["seq"] in patches:
                 ev["response_metrics"] = patches[ev["seq"]]
         doc = {
-            "session_id":   self._session_id,
-            "started_at":   header_obj.get("started_at") if header_obj else None,
-            "names":        header_obj.get("names") if header_obj else {},
-            "metric_guide": _METRIC_GUIDE,
-            "events":       events,
+            "session_id":     self._session_id,
+            "started_at":     header_obj.get("started_at") if header_obj else None,
+            "names":          header_obj.get("names") if header_obj else {},
+            "metric_guide":   _METRIC_GUIDE,
+            "events":         events,
+            "metric_snapshots": snapshots,
+            "lifecycle_events": lifecycle_events,
         }
         filename = f"session_{self._session_id}.json"
         return web.Response(
@@ -558,6 +604,134 @@ class BiofeedbackServer:
             if self.dyadic:
                 for msg in self.dyadic.get_updates(self.proc_a, self.proc_b, now):
                     await self.broadcast(msg)
+            if (self._session_file is not None
+                    and now - self._last_log_snapshot >= 30.0):
+                self._last_log_snapshot = now
+                elapsed = round(now - self._session_start_mono, 1)
+                self._session_file.write(json.dumps({
+                    "type":              "metrics_snapshot",
+                    "wall_time":         datetime.now(timezone.utc).isoformat(),
+                    "session_elapsed_s": elapsed,
+                    "metrics":           copy.deepcopy(self._metrics_snapshot),
+                }) + "\n")
+
+    # ── setup endpoints ───────────────────────────────────────────────────────
+
+    async def state_handler(self, request: web.Request) -> web.Response:
+        return web.Response(
+            content_type="application/json",
+            text=json.dumps({
+                "configured": self._configured,
+                "names": {
+                    "A": self.proc_a.name,
+                    "B": self.proc_b.name if self.proc_b else None,
+                },
+            }),
+            headers=self._NO_CACHE,
+        )
+
+    async def scan_handler(self, request: web.Request) -> web.Response:
+        from ble import scan_for_hr_monitors
+        try:
+            devices = await scan_for_hr_monitors(timeout=10.0)
+            result = [{"name": d.name or "", "address": d.address} for d in devices]
+        except Exception as exc:
+            return web.Response(status=500, content_type="application/json",
+                                text=json.dumps({"error": str(exc)}))
+        return web.Response(content_type="application/json", text=json.dumps(result))
+
+    async def configure_handler(self, request: web.Request) -> web.Response:
+        try:
+            data = await request.json()
+        except Exception:
+            return web.Response(status=400, content_type="application/json",
+                                text=json.dumps({"error": "invalid JSON"}))
+
+        simulate = data.get("simulate", False)
+
+        if simulate:
+            names = data.get("names", ["Partner A", "Partner B"])
+            bpms  = data.get("bpm",   [68, 75])
+            self.proc_a.name = names[0] if names else "Partner A"
+            if self.proc_b and len(names) > 1:
+                self.proc_b.name = names[1]
+            if self.dyadic:
+                self.dyadic.name_a = self.proc_a.name
+                self.dyadic.name_b = self.proc_b.name if self.proc_b else "Partner B"
+
+            from simulator import simulate_stream
+
+            async def _sim(idx: int, name: str, base_bpm: int) -> None:
+                self.on_sensor_connect(idx)
+                await simulate_stream(
+                    name=name, base_bpm=base_bpm,
+                    on_bpm=lambda bpm: self.on_bpm(idx, bpm),
+                    on_rr=lambda rr: self.on_rr(idx, rr),
+                    on_connect=lambda label: print(f"[sim] {label} connected"),
+                )
+
+            asyncio.create_task(_sim(0, self.proc_a.name, bpms[0] if bpms else 68))
+            if self.proc_b and len(names) > 1:
+                asyncio.create_task(_sim(1, self.proc_b.name,
+                                         bpms[1] if len(bpms) > 1 else 75))
+        else:
+            partners = data.get("partners", [])
+            if not partners:
+                return web.Response(status=400, content_type="application/json",
+                                    text=json.dumps({"error": "no partners specified"}))
+            for p in partners:
+                idx  = p.get("idx", 0)
+                name = p.get("name", "").strip() or ("Partner A" if idx == 0 else "Partner B")
+                if idx == 0:
+                    self.proc_a.name = name
+                elif idx == 1 and self.proc_b:
+                    self.proc_b.name = name
+            if self.dyadic:
+                self.dyadic.name_a = self.proc_a.name
+                if self.proc_b:
+                    self.dyadic.name_b = self.proc_b.name
+
+            from ble import stream as ble_stream
+            from battery import read_battery_once
+
+            async def _ble(idx: int, address: str) -> None:
+                proc = self.proc_a if idx == 0 else self.proc_b
+                batt = await read_battery_once(address)
+                if batt is not None:
+                    self.on_battery(idx, batt)
+                await ble_stream(
+                    address=address,
+                    name=proc.name,
+                    on_bpm=lambda bpm: self.on_bpm(idx, bpm),
+                    on_rr=lambda rr: self.on_rr(idx, rr),
+                    on_connect=lambda label: (
+                        print(f"[ble] {label} connected"),
+                        self.on_sensor_connect(idx),
+                    ),
+                    on_disconnect=lambda label, reason: (
+                        print(f"[ble] {label} disconnected: {reason}"),
+                        self.on_sensor_disconnect(idx),
+                    ),
+                )
+
+            for p in partners:
+                asyncio.create_task(_ble(p["idx"], p["address"]))
+
+        self._configured = True
+        single_partner = (
+            not simulate and len(data.get("partners", [])) == 1
+        ) or (
+            simulate and len(data.get("names", [])) < 2
+        )
+        await self.broadcast({
+            "type": "session_init",
+            "names": {
+                "A": self.proc_a.name,
+                "B": self.proc_b.name if self.proc_b else None,
+            },
+            "single_partner": single_partner,
+        })
+        return web.Response(content_type="application/json", text=json.dumps({"ok": True}))
 
     # ── app factory ──────────────────────────────────────────────────────────
 
@@ -571,6 +745,9 @@ class BiofeedbackServer:
         app.router.add_post("/api/transcribe", self.transcribe_handler)
         app.router.add_post("/api/enroll/{partner}", self.enroll_handler)
         app.router.add_get("/api/session_download", self.session_download_handler)
+        app.router.add_get("/api/state", self.state_handler)
+        app.router.add_get("/api/scan", self.scan_handler)
+        app.router.add_post("/api/configure", self.configure_handler)
         return app
 
     async def run(self) -> None:

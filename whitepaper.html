@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8" />
-<title>Couples Biofeedback — Technical Whitepaper</title>
+<title>Couples Biofeedback — A Therapist's Guide</title>
 <style>
 
 /* ── Fonts & base ─────────────────────────────────────────────── */
@@ -230,16 +230,6 @@ td {
 
 tr:last-child td { border-bottom: none; }
 
-/* ── Code ─────────────────────────────────────────────────────── */
-code {
-  font-family: 'Menlo', 'Consolas', monospace;
-  font-size: 0.85em;
-  background: var(--bg-tile);
-  border: 1px solid var(--border);
-  border-radius: 3px;
-  padding: 0.1em 0.35em;
-}
-
 /* ── References ───────────────────────────────────────────────── */
 .references {
   margin-top: 2.5em;
@@ -289,6 +279,36 @@ code {
   margin-bottom: 0.15em;
 }
 
+/* ── Step list ────────────────────────────────────────────────── */
+.steps {
+  counter-reset: step;
+  list-style: none;
+  margin-left: 0;
+}
+.steps li {
+  counter-increment: step;
+  padding-left: 2.2em;
+  position: relative;
+  margin-bottom: 0.6em;
+}
+.steps li::before {
+  content: counter(step);
+  position: absolute;
+  left: 0;
+  width: 1.5em;
+  height: 1.5em;
+  background: var(--accent);
+  color: #fff;
+  border-radius: 50%;
+  font-family: var(--font-ui);
+  font-size: 0.75em;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  top: 0.2em;
+}
+
 /* ── Print ────────────────────────────────────────────────────── */
 @media print {
   body { font-size: 10.5pt; padding: 0; max-width: 100%; }
@@ -309,16 +329,17 @@ code {
 
 <!-- ═══════════════════════════════════════════════════════════════ COVER -->
 <div class="cover">
-  <span class="cover-eyebrow">Technical Whitepaper</span>
-  <h1>Couples Biofeedback<br>Dashboard</h1>
+  <span class="cover-eyebrow">Clinician's Guide</span>
+  <h1>Couples Biofeedback<br>in the Therapy Room</h1>
   <p class="cover-subtitle">
-    Real-time physiological monitoring for couples therapy — how the app works,
-    what each metric means, and how to interpret the signals together.
+    A practical guide to setting up sessions, reading the dashboard,
+    and using physiological signals to support couples work —
+    with the science behind each signal.
   </p>
   <div class="cover-meta">
-    <strong>Purpose</strong> · Clinical decision support tool for therapists<br>
-    <strong>Sensors</strong> · Bluetooth Low Energy heart rate monitors (any ANT+/BLE HRM)<br>
-    <strong>Platform</strong> · Web application (Python server · vanilla JS client)<br>
+    <strong>Audience</strong> · Therapists and clinicians conducting couples sessions<br>
+    <strong>Hardware required</strong> · Any Bluetooth Low Energy heart rate monitor<br>
+    <strong>Setup time</strong> · 5–10 minutes per session<br>
     <strong>Status</strong> · Research prototype — validate thresholds before clinical use
   </div>
 </div>
@@ -326,747 +347,662 @@ code {
 <!-- ═══════════════════════════════════════════════════════════════ TOC -->
 <h2 style="border-top:none; margin-top:0;">Contents</h2>
 <ol style="margin-left:1.4em; line-height:2; font-family: var(--font-ui); font-size:0.9em; color: var(--muted);">
-  <li>Purpose and clinical context</li>
-  <li>System architecture</li>
-  <li>Signal acquisition and artifact rejection</li>
-  <li>Metrics — individual physiological state</li>
-  <li>Metrics — composite activation index</li>
-  <li>Metrics — flooding detector</li>
-  <li>Metrics — cardiac coherence</li>
-  <li>Metrics — dyadic coupling</li>
-  <li>Personalized baselining</li>
-  <li>Recovery mode — guided breathing</li>
-  <li>Interpretation guide for clinicians</li>
-  <li>Limitations and important caveats</li>
+  <li>What this tool does — and what it doesn't</li>
+  <li>Before the session: hardware and setup</li>
+  <li>Collecting the baseline</li>
+  <li>Reading the session dashboard</li>
+  <li>When flooding is detected</li>
+  <li>The recovery break</li>
+  <li>After the session: the session log</li>
+  <li>The science behind the signals</li>
+  <li>What the tool cannot tell you</li>
   <li>References</li>
 </ol>
 
 <!-- ═══════════════════════════════════════════════════════════════ §1 -->
-<h2><span class="section-num">§ 1</span>Purpose and Clinical Context</h2>
+<h2><span class="section-num">§ 1</span>What This Tool Does — and What It Doesn't</h2>
 
 <p>
-  Couples therapy is physiologically demanding. Research by John Gottman and Robert
-  Levenson beginning in the 1970s established that escalating conflict drives measurable
-  changes in both partners' autonomic nervous systems — heart rate rises, heart rate
-  variability collapses, and the capacity for empathic listening narrows sharply
-  [1, 2]. When heart rate exceeds a personal flooding threshold, partners can no longer
-  process information effectively, and continued conversation typically makes things
-  worse rather than better [3].
+  Couples therapy is physiologically demanding. John Gottman and Robert Levenson's
+  landmark research beginning in the 1970s demonstrated that escalating conflict
+  drives measurable changes in both partners' autonomic nervous systems — heart rate
+  rises, heart rate variability collapses, and the capacity for empathic listening
+  narrows sharply [1, 2]. When a partner's heart rate exceeds their personal flooding
+  threshold, they can no longer process information effectively. Continued conversation
+  at that point typically makes things worse, not better [3].
 </p>
 
 <p>
-  This application puts real-time physiological data in the room. It is designed for
-  a therapist to monitor both partners' arousal states on a shared screen, to recognize
-  the early signs of physiological flooding before the conversation derails, and to
-  guide partners through a structured physiological break when needed. The recovery
-  screen provides paced breathing exercises with live coherence feedback to facilitate
-  genuine nervous system down-regulation — not just a pause in talking.
+  This tool brings that physiology into the room as a visible, shared signal. It is
+  designed to help you recognize the early signs of physiological flooding before the
+  conversation derails, to support a genuinely effective recovery break when needed,
+  and to give you a richer picture of how each partner's body is responding throughout
+  the session.
 </p>
 
 <div class="callout">
-  <strong>Scope of the signal</strong>
-  All metrics are physiological proxies. They measure body state, not emotion or
-  relational quality. A rising heart rate may reflect anger, excitement, effort, or
-  a passing thought. Interpret signals in context and in conversation with the
-  partners — never as independent verdicts about what someone is feeling.
+  <strong>The signal is physiological, not emotional</strong>
+  Everything this tool measures is a body-state proxy. A rising heart rate may reflect
+  anger, excitement, effort, deep engagement, or a passing intrusive thought. The numbers
+  describe what the body is doing — they do not tell you what a person is feeling,
+  whether a relationship is healthy, or what is causing the arousal. Your relational
+  attunement remains the primary interpretive instrument. The physiology is a
+  second channel of information, not a replacement for the first.
 </div>
 
 <!-- ═══════════════════════════════════════════════════════════════ §2 -->
-<h2><span class="section-num">§ 2</span>System Architecture</h2>
+<h2><span class="section-num">§ 2</span>Before the Session: Hardware and Setup</h2>
 
+<h3>Choosing a sensor</h3>
 <p>
-  The application follows a three-layer architecture: sensor hardware, a Python
-  server, and a browser-based dashboard.
+  Any Bluetooth Low Energy (BLE) heart rate monitor that follows the standard
+  Heart Rate Service specification works with this system — chest straps, armbands,
+  or optical finger sensors. Chest straps generally provide more accurate R–R interval
+  data than wrist-based optical sensors because they measure the electrical signal
+  directly rather than inferring it from blood volume changes under the skin.
+  For couples work, an unobtrusive chest strap (worn under clothing) is usually
+  the least disruptive option. Make sure both devices are charged before the session.
 </p>
 
-<h3>Hardware layer</h3>
-<p>
-  Any Bluetooth Low Energy heart rate monitor that implements the standard
-  Heart Rate Service (UUID 0x180D) is compatible — chest straps, armbands, or
-  finger sensors. The device streams R–R intervals (the time between successive
-  heartbeats) in milliseconds. Battery level is read at startup via the Battery
-  Service (UUID 0x180F).
-</p>
+<h3>Starting the application</h3>
+<ol class="steps">
+  <li>
+    Open a terminal in the application folder and activate the virtual environment:
+    <br><code style="font-family:monospace; font-size:0.85em;">source .venv/bin/activate</code>
+  </li>
+  <li>
+    Start the server: <code style="font-family:monospace; font-size:0.85em;">python launch.py</code>
+    <br>The browser will open automatically to the setup dialog.
+  </li>
+  <li>
+    Both partners put on their sensors. Give them 1–2 minutes to settle before
+    proceeding so the optical or electrical contact stabilizes.
+  </li>
+  <li>
+    In the setup dialog, click <strong>Scan for devices</strong>. The app searches
+    for nearby BLE heart rate monitors for 10 seconds and lists what it finds by
+    device name and identifier. If you have the device identifiers written on the
+    sensors (recommended), match them in the dropdowns. Type each partner's name
+    into the name fields and click <strong>Start session</strong>.
+  </li>
+</ol>
 
-<h3>Server layer</h3>
-<p>
-  A lightweight Python server (<code>server.py</code>) handles BLE connections via the
-  <code>bleak</code> library and runs a <code>aiohttp</code> HTTP and WebSocket server.
-  Heart rate metrics are computed in <code>processor.py</code> using a tiered cadence:
-</p>
+<div class="callout">
+  <strong>Signal quality</strong>
+  A small colored dot appears next to each partner's name. Green means the sensor is
+  reading cleanly (≥ 90% of beats usable). Amber means acceptable but imperfect —
+  check that the strap is snug and the sensor pad is making skin contact. Red means
+  the signal is too noisy to trust; reposition the sensor before proceeding.
+  Signal quality often improves after the first minute of wear as the sensor warms up.
+</div>
 
-<table>
-  <thead>
-    <tr><th>Tier</th><th>Cadence</th><th>Window</th><th>What it computes</th></tr>
-  </thead>
-  <tbody>
-    <tr><td>Fast</td><td>Every beat</td><td>10 s</td><td>Heart rate (bpm)</td></tr>
-    <tr><td>Mid</td><td>Every 5 s</td><td>30 s</td><td>HRV (RMSSD), flooding flag, signal quality</td></tr>
-    <tr><td>Slow</td><td>Every 10 s</td><td>60 s</td><td>Vagal activity (HF), coherence, respiration rate, activation index</td></tr>
-    <tr><td>Dyadic</td><td>Every 15 s</td><td>60 s</td><td>Inter-partner HR synchrony</td></tr>
-  </tbody>
-</table>
-
+<h3>Voice enrollment (optional)</h3>
 <p>
-  Updates are broadcast over WebSocket to all connected browser tabs. The session
-  supports one or two partners. In single-partner mode the dyadic panel is hidden.
-</p>
-
-<h3>Client layer</h3>
-<p>
-  A single-page web application (<code>index.html</code> for the session view,
-  <code>mode_b.html</code> for the recovery screen) receives WebSocket messages and
-  renders metrics in real time using the Canvas API and SVG animations. No external
-  JavaScript frameworks are used. The app works on any modern browser and is
-  optimized for landscape tablet display.
+  The session transcript feature identifies who is speaking in real time. For
+  speaker identification to work, each person speaks alone into the microphone for
+  about four seconds — their name button in the voice enrollment row turns to a
+  checkmark when enrolled. Do this before starting the recording. The therapist can
+  also enroll their own voice if they want their own utterances attributed.
 </p>
 
 <!-- ═══════════════════════════════════════════════════════════════ §3 -->
-<h2><span class="section-num">§ 3</span>Signal Acquisition and Artifact Rejection</h2>
+<h2><span class="section-num">§ 3</span>Collecting the Baseline</h2>
 
-<h3>R–R intervals</h3>
 <p>
-  Heart rate monitors transmit the time elapsed between consecutive heartbeats —
-  the R–R or inter-beat interval (IBI), measured in milliseconds. This is more
-  informative than beats-per-minute because it preserves the natural variability
-  between beats that reflects autonomic nervous system activity. A healthy resting
-  adult at 60 bpm has R–R intervals near 1000 ms; the same person at 80 bpm has
-  intervals near 750 ms. The <em>variation</em> around those values — changing
-  beat by beat — is the raw material for all HRV metrics.
+  Every comparison this tool makes is individual — it measures each partner against
+  their own calm resting state, not against population averages. Population norms
+  for heart rate variability vary enormously with age, fitness, medications, chronic
+  stress, and time of day; applying a fixed cut-off would frequently mislead [4].
+  The baseline you collect at the start of each session sets the personal reference
+  point for all metrics that follow.
 </p>
 
-<h3>Artifact rejection</h3>
-<p>
-  Before any metric is computed, the raw R–R series passes through a two-stage
-  cleaning filter (<code>clean_rr()</code>):
-</p>
-<ol>
+<h3>Baseline procedure</h3>
+<ol class="steps">
   <li>
-    <strong>Absolute range filter.</strong> Intervals outside 300–2000 ms
-    (i.e., implying a heart rate outside 30–200 bpm) are discarded as sensor
-    artifacts or movement artefacts.
+    Once sensors are showing green signal quality, ask both partners to sit quietly
+    and breathe normally. No specific instructions about breathing rate — just
+    settled, ordinary sitting.
   </li>
   <li>
-    <strong>Ectopic beat filter.</strong> Any interval differing from the running
-    5-beat local median by more than 20% is flagged as an ectopic or missed beat
-    and removed. The 20% threshold is a widely-used default [4]; conversational
-    couples move and gesture, so the filter is intentionally permissive.
+    Wait at least two full minutes. The nervous system needs time to shift toward
+    resting tone; a baseline captured while someone is still talking or moving
+    will set the reference too high and compress all subsequent comparisons.
+  </li>
+  <li>
+    Click <strong>set baseline — A</strong> and <strong>set baseline — B</strong>.
+    The app uses the preceding 2–5 minutes of data, sliding a one-minute window
+    in 30-second steps to build a distribution for each metric rather than a single
+    point estimate. The baseline indicator in the header confirms when both are set.
   </li>
 </ol>
+
+<div class="callout warn">
+  <strong>If the state description reads "moderate" at rest</strong>
+  This usually means the baseline was captured when a partner was still physiologically
+  elevated — perhaps from the drive over, anticipation of the session, or anxiety
+  about the sensors. Clear the baseline with the "clear — A / B" button, wait a
+  few minutes, and reset. A well-collected baseline should produce a resting state
+  description of "low activation, stable."
+</div>
+
 <p>
-  The proportion of beats that survive cleaning is reported as <strong>signal quality</strong>
-  (0–100%, shown as a colored dot in each partner's header). Values above 90% indicate
-  reliable contact; 75–90% is acceptable; below 75% warrants repositioning the sensor.
+  Baselines can be cleared and reset at any point in the session — for example, if
+  a partner needed to get up and move around, or if you want to establish a new
+  reference point after a successful recovery break.
 </p>
 
 <!-- ═══════════════════════════════════════════════════════════════ §4 -->
-<h2><span class="section-num">§ 4</span>Metrics — Individual Physiological State</h2>
+<h2><span class="section-num">§ 4</span>Reading the Session Dashboard</h2>
 
-<div class="metric-grid">
-
-  <div class="metric-card">
-    <div class="mc-label">Fast tier · every beat</div>
-    <div class="mc-name">Heart Rate (bpm)</div>
-    <div class="mc-body">
-      60,000 ÷ mean R–R over the last 10 seconds.
-      Displayed as a large number in the center of each partner panel.
-      Turns red when the flooding threshold is exceeded.
-    </div>
-  </div>
-
-  <div class="metric-card">
-    <div class="mc-label">Mid tier · every 5 s</div>
-    <div class="mc-name">HRV — Heart Rhythm Variability (ms)</div>
-    <div class="mc-body">
-      RMSSD: root mean square of successive R–R differences over 30 s.
-      Higher values mean more beat-to-beat variability, reflecting
-      active parasympathetic (vagal) influence on the heart.
-    </div>
-  </div>
-
-  <div class="metric-card">
-    <div class="mc-label">Slow tier · every 10 s</div>
-    <div class="mc-name">Vagal Activity (a.u.)</div>
-    <div class="mc-body">
-      Integrated power in the high-frequency (HF) band 0.15–0.40 Hz of the
-      normalized Lomb-Scargle periodogram of the 60-second R–R series,
-      scaled ×10,000 for display. Reflects breathing-driven vagal
-      modulation of heart rate. Typical resting range: 5–50 a.u.
-    </div>
-  </div>
-
-  <div class="metric-card">
-    <div class="mc-label">Slow tier · every 10 s</div>
-    <div class="mc-name">Respiration Rate (breaths/min)</div>
-    <div class="mc-body">
-      Derived — not measured directly. The dominant spectral peak
-      in the HF band of the R–R periodogram identifies the breathing
-      frequency. Accurate for rates between 9 and 24 breaths/min.
-    </div>
-  </div>
-
-  <div class="metric-card">
-    <div class="mc-label">Slow tier · every 10 s</div>
-    <div class="mc-name">Coherence</div>
-    <div class="mc-body">
-      McCraty / HeartMath coherence ratio: power concentrated in a
-      single dominant peak (0.04–0.26 Hz) relative to total spectral
-      power. High coherence indicates a slow, organized heart rhythm
-      oscillation — the hallmark of the self-regulated state.
-    </div>
-  </div>
-
-  <div class="metric-card">
-    <div class="mc-label">Visual indicator</div>
-    <div class="mc-name">State Description</div>
-    <div class="mc-body">
-      A plain-language body-fact sentence generated from the
-      composite of all slow-tier metrics against the personal
-      baseline. Describes what the body is doing — not what the
-      person is feeling.
-    </div>
-  </div>
-
-</div>
-
-<h3>Heart Rhythm Variability (HRV) in depth</h3>
 <p>
-  RMSSD — the root mean square of successive R–R differences — is the
-  most widely validated ultra-short HRV metric. It captures rapid,
-  beat-to-beat variability that is almost entirely mediated by the
-  parasympathetic (vagal) branch of the autonomic nervous system [5].
-  Because it does not require spectral decomposition, it is reliable
-  on windows as short as 30 seconds [6], making it well-suited to
-  the dynamic conversational context of couples therapy.
-</p>
-<p>
-  Under stress or activation, vagal tone is withdrawn quickly — often
-  within a few beats. RMSSD drops in parallel. When a person calms
-  down, vagal tone returns and RMSSD rises. In the dashboard, RMSSD is
-  compared against each person's individual baseline; the state description
-  reports whether variability is reduced ("vagal tone withdrawn") or
-  elevated ("parasympathetic active").
+  The main session view shows both partners side by side. Here is what each element
+  tells you and what to watch for.
 </p>
 
-<h3>Vagal Activity (HF power) in depth</h3>
-<p>
-  The high-frequency (HF) band of the R–R power spectrum — 0.15 to 0.40 Hz —
-  corresponds to the range of normal resting breathing rates (9 to 24 breaths
-  per minute). Heart rate accelerates slightly with each inhalation and slows
-  with each exhalation; this rhythmic coupling is called Respiratory Sinus
-  Arrhythmia (RSA) and is mediated almost exclusively by the vagus nerve [7].
-  HF power quantifies the amplitude of this oscillation.
-</p>
-
-<h4>Units and display scaling</h4>
-<p>
-  The app uses a <em>normalized</em> Lomb-Scargle periodogram
-  (<code>normalize=True</code> in SciPy), which rescales the spectrum so that a
-  pure sinusoid of unit amplitude has a periodogram value of 1.0. After integrating
-  over the 0.25 Hz HF band, the resulting values are typically in the range
-  0.0001–0.005 — far too small to display as integers. The dashboard therefore
-  multiplies the raw value by 10,000 before display. Typical resting values on
-  screen are roughly 5–50 a.u.; values above ~30 indicate healthy vagal activity
-  at rest. The label "a.u." (arbitrary units) is used because the normalization
-  removes the physical ms² dimension that would apply to an un-normalized Welch
-  periodogram. Only relative changes within a session — not absolute values
-  between sessions or people — should be interpreted.
-</p>
-
-<div class="callout warn">
-  <strong>Breathing rate caveat</strong>
-  If a partner breathes slower than 9 breaths per minute — common during
-  deep coherence breathing — the RSA peak migrates into the low-frequency
-  (LF) band and HF power underestimates vagal tone. The activation algorithm
-  accounts for this by switching to RMSSD-only vagal scoring when respiration
-  drops below 9 breaths/min.
-</div>
+<h3>The activation score and time series (0–100)</h3>
 
 <p>
-  The Lomb-Scargle periodogram is used instead of the FFT because it operates
-  directly on the unevenly sampled R–R event series without requiring cubic
-  spline interpolation to a uniform time grid — important for short, noisy
-  windows typical in a therapy session [8].
-</p>
-
-<h3>Respiration Rate (derived)</h3>
-<p>
-  Because this application uses heart rate monitors rather than dedicated
-  respiration sensors, breathing rate is inferred from the heart rate signal:
-  the dominant spectral peak within the HF band identifies the frequency at
-  which the heart is being rhythmically modulated by breathing. This estimate
-  is reliable when the person is breathing in a regular pattern; it can be
-  unreliable when talking continuously (irregular breathing) or when breathing
-  very slowly (peak migrates out of the HF band). It is best read as a rough
-  guide and confirmation of paced breathing during recovery, not a precise
-  clinical measurement.
-</p>
-
-<!-- ═══════════════════════════════════════════════════════════════ §5 -->
-<h2><span class="section-num">§ 5</span>Metrics — Composite Activation Index</h2>
-
-<p>
-  The activation index (displayed as a 0–100 score) is a composite of all
-  slow-tier metrics expressed as z-scores against the individual baseline.
-  It answers the question: <em>How physiologically activated is this person
-  relative to their own calm resting state?</em>
-</p>
-
-<h3>How it is computed</h3>
-<p>
-  Each metric is standardized against the personal baseline
-  (mean and standard deviation collected during a calm period at the start
-  of the session). The signs are chosen so that all components move in the
-  same direction under arousal:
+  The large number under each partner's heart rate is their <strong>activation
+  index</strong> — a composite of all physiological signals expressed as a single
+  0–100 score against their personal baseline. Think of it as a body-state thermometer.
+  Below it, a scrolling time series shows the last three minutes of activation history,
+  moving from left to right. Labels along the bottom show the time scale (−3m, −2m, −1m, now).
 </p>
 
 <table>
   <thead>
-    <tr><th>Component</th><th>Direction under activation</th><th>Weight</th></tr>
-  </thead>
-  <tbody>
-    <tr><td>Heart rate</td><td>↑ rises</td><td>1.0</td></tr>
-    <tr><td>Vagal tone (RMSSD / HF)</td><td>↓ falls → contributes positively</td><td>1.0</td></tr>
-    <tr><td>Respiration rate</td><td>↑ rises</td><td>0.5</td></tr>
-    <tr><td>Coherence</td><td>↓ falls → contributes positively</td><td>0.5</td></tr>
-  </tbody>
-</table>
-
-<p>
-  The weighted mean of z-scores is passed through a logistic function to
-  produce a bounded 0–100 score:
-</p>
-
-<p style="text-align:center; font-family: 'Menlo', monospace; font-size:0.88em; margin: 1em 0; background:var(--bg-tile); padding:0.8em; border-radius:4px; border:1px solid var(--border);">
-  score = 100 / (1 + e<sup>−raw / 1.5</sup>)
-</p>
-
-<p>
-  A temporal smoothing parameter (α = 0.3) blends the new score with the
-  previous value to reduce noise-driven jumping: <code>score = 0.3 × new + 0.7 × previous</code>.
-</p>
-
-<h3>Zone thresholds</h3>
-<table>
-  <thead>
-    <tr><th>Zone</th><th>Score range</th><th>Color</th><th>Interpretation</th></tr>
+    <tr><th>Zone</th><th>Score</th><th>Color</th><th>What it means clinically</th></tr>
   </thead>
   <tbody>
     <tr>
-      <td><strong>Low / calm</strong></td><td>0–35</td><td>Teal</td>
-      <td>Physiologically settled. Capacity for empathic listening is intact.</td>
+      <td><strong>Calm</strong></td><td>0–35</td><td>Teal</td>
+      <td>Physiologically settled. Capacity for empathic listening and reflective processing is intact.</td>
     </tr>
     <tr>
       <td><strong>Moderate</strong></td><td>35–65</td><td>Amber</td>
-      <td>Elevated arousal — engaged or mildly stressed. Monitor for escalation.</td>
+      <td>Elevated arousal — engaged, mildly stressed, or emotionally involved. Watch the direction: rising is an early warning, falling is positive.</td>
     </tr>
     <tr>
-      <td><strong>High / flooded</strong></td><td>65–100</td><td>Red</td>
-      <td>Strong activation. When combined with a flooding flag, a break is indicated.</td>
+      <td><strong>High</strong></td><td>65–100</td><td>Red</td>
+      <td>Strong physiological activation. If the flooding threshold is also crossed, a break is indicated.</td>
     </tr>
   </tbody>
 </table>
 
-<h3>Confidence and direction</h3>
 <p>
-  The <strong>confidence</strong> value (0–1) measures signal agreement: when all
-  contributing components point in the same direction, confidence is 1.0. When
-  they are mixed — say, heart rate is elevated but coherence and HRV are normal —
-  confidence falls and the state description includes "(signals mixed)". Low
-  confidence suggests waiting for more data before acting on the score.
-</p>
-<p>
-  The <strong>direction</strong> indicator (rising / stable / falling) is computed
-  by comparing the current smoothed score to the previous: a change of more than
-  2 points triggers rising or falling.
+  The <strong>direction arrow</strong> next to the score (rising / stable / falling)
+  is often more useful than the score itself. A partner at 55 and rising is heading
+  somewhere different from a partner at 55 and falling.
 </p>
 
-<h3>Calm zone</h3>
-<p>
-  When activation stays continuously below 35, a timer appears below the score
-  showing how long that partner has been in the calm zone (e.g., "1:42 in calm
-  zone"). This is the most clinically relevant signal on the recovery screen:
-  physiological down-regulation has actually occurred, not just a pause.
-</p>
-
-<!-- ═══════════════════════════════════════════════════════════════ §6 -->
-<h2><span class="section-num">§ 6</span>Metrics — Flooding Detector</h2>
-
-<p>
-  The flooding (Diffuse Physiological Arousal, DPA) flag is based on John Gottman's
-  research identifying heart rate thresholds above which productive conversation
-  becomes physiologically impossible [3]. It is computed in the mid tier (every 5 s)
-  and triggers immediately, without smoothing.
-</p>
-
-<h3>Two-criterion rule</h3>
-<p>
-  A partner is flagged as flooded if either criterion is met:
-</p>
-<ol>
-  <li>
-    <strong>Relative criterion:</strong> current heart rate ≥ 110% of the personal
-    baseline mean (i.e., 10% above resting). This is the primary criterion and
-    the most sensitive to individual differences.
-  </li>
-  <li>
-    <strong>Absolute criterion:</strong> heart rate ≥ 95 bpm. This acts as a floor
-    for people whose baseline is already moderately elevated.
-  </li>
-</ol>
-
-<div class="callout danger">
-  <strong>When flooding is detected</strong>
-  A red alert banner appears across the top of the session view naming the flooded
-  partner(s) and offering a one-click link to the recovery screen. Research suggests
-  that norepinephrine — the primary stress hormone during flooding — takes
-  approximately 20 minutes to clear, even after the stressor stops [3]. A break
-  shorter than that often fails to achieve genuine physiological recovery.
+<div class="callout">
+  <strong>Confidence — when signals disagree</strong>
+  When the activation score is followed by "(signals mixed)," it means the physiological
+  indicators are pointing in different directions — heart rate is elevated, say, but
+  heart rhythm variability and coherence remain normal. This is a signal to wait for
+  more data rather than act on the score. Confidence typically resolves within one or
+  two update cycles (20–30 seconds).
 </div>
 
+<h3>Heart rate</h3>
 <p>
-  When flooding is detected, the partner's heart rate display turns red and
-  their panel is highlighted. The "flooded" badge replaces "regulated" in their
-  header. The flooding state automatically clears when heart rate returns below
-  the threshold.
+  The large number in each partner panel is current heart rate in beats per minute,
+  updated with every heartbeat. The delta below it shows the percentage above or
+  below the personal baseline mean — so "+14% above baseline" tells you something
+  more useful than the raw number. The heart rate turns red and the panel is highlighted
+  when the flooding threshold is crossed (see §5).
 </p>
 
-<!-- ═══════════════════════════════════════════════════════════════ §7 -->
-<h2><span class="section-num">§ 7</span>Metrics — Cardiac Coherence</h2>
-
+<h3>Heart rhythm variability (HRV)</h3>
 <p>
-  Cardiac coherence is distinct from HRV: it is not about <em>how much</em>
-  the heart rhythm varies, but about <em>how organized</em> that variation is.
-  A coherent heart rhythm shows a single smooth, dominant oscillation —
-  characteristically near 0.1 Hz (6 breaths per minute, the resonant frequency
-  of the cardiovascular system). A disorganized rhythm shows irregular,
-  multi-frequency variation.
+  Labeled "HRV" in the tile below the canvas, the value shown (in milliseconds) is
+  RMSSD — the standard clinical measure of beat-to-beat variability. Higher values
+  mean the heart is varying more freely between beats, which reflects active
+  parasympathetic (vagal) regulation. Under emotional stress, the vagus nerve withdraws
+  tone quickly — within a few beats — and RMSSD drops. When a person genuinely calms
+  down, vagal tone returns and RMSSD rises. This is one of the earliest and most
+  sensitive indicators of stress onset and recovery [5, 6].
 </p>
 
-<h3>McCraty coherence ratio</h3>
+<h3>Vagal activity</h3>
 <p>
-  The app computes coherence using the method developed by Rollin McCraty and
-  colleagues at the HeartMath Institute [9]:
-</p>
-<ol>
-  <li>The R–R series is resampled to a uniform 4 Hz grid.</li>
-  <li>Welch's method produces a power spectral density estimate over 0.04–0.26 Hz.</li>
-  <li>The peak frequency is identified.</li>
-  <li>Power within ±0.015 Hz of that peak is integrated.</li>
-  <li>Coherence = peak band power ÷ (total power − peak band power).</li>
-</ol>
-<p>
-  Values above approximately 0.6 indicate an organized, self-regulated state.
-  Values near 0 indicate a disorganized, fragmented rhythm. The coherence bar
-  in the dashboard is scaled to a maximum of 3.0 (which represents very high
-  coherence in practice).
+  This tile measures how much of the heart's variability falls within the
+  breathing-frequency range — the physiological signature of the vagal brake being
+  applied in coordination with each breath [7]. When someone is stressed and breathing
+  irregularly, this number falls. When they are breathing slowly and steadily, it rises.
+  During recovery breathing exercises, watching vagal activity rise confirms that the
+  paced breathing is engaging the parasympathetic system, not just passing time.
 </p>
 
-<h3>Coherence during recovery</h3>
+<h3>Respiration rate</h3>
 <p>
-  Coherence is the primary biofeedback target on the recovery screen. Slow paced
-  breathing near 5–6 breaths per minute — the resonance frequency — naturally
-  entrains heart rate into a large-amplitude, single-frequency oscillation,
-  dramatically raising coherence. The recovery screen shows per-partner coherence
-  bars with trend arrows (↑ / → / ↓) updated every 10 seconds, allowing both
-  partners to see in real time whether the breathing exercise is producing genuine
-  physiological regulation.
+  Derived from the heart rate signal rather than a dedicated sensor — the heart rate
+  accelerates slightly with each inhalation and slows with each exhalation, making
+  breathing rate readable in the heart signal [8]. This is a useful rough guide during
+  recovery breathing (confirming the partner is hitting the target rate) but should not
+  be treated as a precise measurement during natural conversation, when breathing
+  is irregular.
 </p>
 
-<!-- ═══════════════════════════════════════════════════════════════ §8 -->
-<h2><span class="section-num">§ 8</span>Metrics — Dyadic Coupling</h2>
-
+<h3>Coherence</h3>
 <p>
-  The dyadic coupling panel — marked "exploratory layer" — measures the degree
-  to which the two partners' heart rates are <em>moving together</em> in time.
-  This is distinct from whether either individual is regulated; it is a relational
-  signal about physiological co-regulation or co-dysregulation.
+  Coherence measures how <em>organized</em> the heart rhythm is, not just how much it
+  varies. A high-coherence rhythm shows a single, smooth oscillation — the
+  physiological signature of a self-regulated state [9]. A low-coherence rhythm is
+  fragmented and irregular. Coherence often drops before heart rate rises visibly —
+  it can be an early warning of stress that arrives before the conscious experience
+  of feeling stressed. The bar graph fills from left to right; a rising bar during a
+  recovery break is the clearest physiological confirmation that down-regulation is
+  actually occurring.
 </p>
 
-<h3>Time-lagged cross-correlation</h3>
+<h3>State description</h3>
 <p>
-  Every 15 seconds, the app computes a windowed time-lagged cross-correlation
-  (Pearson r) between the two partners' instantaneous heart rate series over
-  the preceding 60 seconds [10]. Both series are:
-</p>
-<ol>
-  <li>Interpolated onto a common 4 Hz uniform time grid.</li>
-  <li>Linearly detrended to remove shared slow drift that would inflate apparent synchrony.</li>
-  <li>Normalized to zero mean and unit variance.</li>
-</ol>
-<p>
-  The lag that produces the maximum absolute correlation is reported, along with
-  its sign (which partner leads) and the in-phase / anti-phase classification.
+  Below the partner name, a short plain-language sentence describes what the body
+  is doing: the activation level, direction, heart rate relative to baseline, and
+  a note about breathing or vagal tone when these are notable. These sentences describe
+  body facts, not emotions — "heart rate 82 bpm — 18% above baseline" is a body fact.
+  What that means emotionally is your interpretation, informed by what is happening
+  in the conversation.
 </p>
 
-<h3>The three dyadic measures</h3>
-<table>
-  <thead>
-    <tr><th>Measure</th><th>What it shows</th></tr>
-  </thead>
-  <tbody>
-    <tr>
-      <td><strong>Peak r</strong></td>
-      <td>Maximum Pearson correlation over all tested lags (±4 s). Range −1 to +1. Values near ±1 indicate tight physiological coupling; near 0 indicates independent physiologies.</td>
-    </tr>
-    <tr>
-      <td><strong>Lag / leader</strong></td>
-      <td>The time offset (in seconds) at which the peak correlation occurs, and which partner's physiology tends to lead the other. Positive lag = Partner A leads; negative = Partner B leads.</td>
-    </tr>
-    <tr>
-      <td><strong>Phase</strong></td>
-      <td>In-phase: the partners' heart rates rise and fall together. Anti-phase: one rises while the other falls.</td>
-    </tr>
-  </tbody>
-</table>
-
-<h3>Interpreting dyadic signals</h3>
+<h3>The dyadic coupling panel</h3>
 <p>
-  The interpretation sentence beneath the dyadic stats reflects the critical
-  insight from Butler, Randall, Reed, and colleagues [11, 12]: synchrony must
-  be read against arousal state, not in isolation.
+  At the bottom of the main view, the dyadic panel shows whether the two partners'
+  physiologies are moving together. <strong>Peak r</strong> is a correlation
+  coefficient (−1 to +1); values above 0.4 indicate meaningful physiological linkage.
+  <strong>Lag / leader</strong> shows which partner's physiology tends to precede
+  the other's by a few seconds.
+</p>
+<p>
+  The critical insight — supported by research on interpersonal emotion systems [10, 11]
+  — is that synchrony must be read against arousal state:
 </p>
 
 <table>
   <thead>
-    <tr><th>Synchrony</th><th>Arousal state</th><th>Interpretation</th></tr>
+    <tr><th>What you see</th><th>What it likely means</th></tr>
   </thead>
   <tbody>
     <tr>
-      <td>High (r ≥ 0.4), in-phase</td>
-      <td>Both settled</td>
-      <td>Co-regulation signal — physiologies entraining in a healthy direction.</td>
+      <td>High synchrony, both partners calm</td>
+      <td>Physiological co-regulation — a positive sign of attunement</td>
     </tr>
     <tr>
-      <td>High (r ≥ 0.4)</td>
-      <td>Both flooded</td>
-      <td>Locked in conflict — synchronized arousal amplification, not co-regulation.</td>
+      <td>High synchrony, both partners activated or flooded</td>
+      <td>Locked in conflict — physiologies amplifying each other's stress</td>
     </tr>
     <tr>
-      <td>High (r ≥ 0.4), anti-phase</td>
-      <td>Any</td>
-      <td>Oppositional coupling — one partner's activation suppresses the other's, or vice versa.</td>
+      <td>Anti-phase synchrony</td>
+      <td>One partner's activation is coupled with the other's suppression — or vice versa</td>
     </tr>
     <tr>
-      <td>Weak (r 0.2–0.4)</td>
-      <td>Any</td>
-      <td>Loose linkage — physiologically present in the same room but not tightly coupled.</td>
-    </tr>
-    <tr>
-      <td>Absent (r &lt; 0.2)</td>
-      <td>Any</td>
-      <td>Independent physiologies — no detectable coupling in this window.</td>
+      <td>Low or absent synchrony</td>
+      <td>Physiologically parallel but not linked in this window</td>
     </tr>
   </tbody>
 </table>
 
 <div class="callout warn">
-  <strong>Surrogate baseline note</strong>
-  Some degree of cross-correlation between two people in the same room is expected
-  even for strangers, arising from shared environmental events (a loud sound, a
-  change in room temperature). To establish what counts as "meaningful" coupling
-  for a specific pair, compare against surrogate pairs — non-partner recordings
-  from the same session, or shuffled temporal segments. This is not currently
-  automated in the app and represents an important limitation of the exploratory layer.
+  <strong>Dyadic coupling is exploratory</strong>
+  The coupling panel is marked "exploratory layer" for a reason. Some statistical
+  correlation between two people in the same room is expected even for strangers —
+  a loud sound or a shared laugh will move both physiologies. Without a comparison
+  against a non-partner baseline, exact r values are hard to interpret in isolation.
+  Use the panel as a qualitative indicator of relational dynamics, not a diagnostic measure.
 </div>
 
-<!-- ═══════════════════════════════════════════════════════════════ §9 -->
-<h2><span class="section-num">§ 9</span>Personalized Baselining</h2>
+<!-- ═══════════════════════════════════════════════════════════════ §5 -->
+<h2><span class="section-num">§ 5</span>When Flooding Is Detected</h2>
 
 <p>
-  Every threshold and comparison in this app is individual. Population norms
-  for HRV vary enormously with age, fitness, medication, and chronic stress;
-  applying a fixed cut-off would be misleading. Instead, the app establishes a
-  personal resting baseline for each partner at the start of each session.
+  Gottman's concept of Diffuse Physiological Arousal (DPA) — which he termed
+  "flooding" — describes a state in which sympathetic activation is so high that
+  the partner's physiological system is overridden [3, 12]. At this level of arousal,
+  the capacity for empathic listening collapses, the ability to access nuanced memory
+  is impaired, and the body is in a mobilized state oriented toward self-protection
+  rather than connection. Continued conversation in this state is rarely productive
+  and can deepen negative affect patterns.
 </p>
 
-<h3>Baseline collection procedure</h3>
-<ol>
-  <li>Both partners sit quietly for 2–5 minutes while wearing the sensors.</li>
-  <li>The therapist clicks "set baseline — A" and "set baseline — B" when ready.</li>
-  <li>The app uses up to 5 minutes of buffered R–R data. It slides a 60-second
-      sub-window in 30-second steps to generate multiple samples of each metric,
-      giving a distribution rather than a single point estimate.</li>
-  <li>For each metric (heart rate, RMSSD, HF power, coherence, respiration rate),
-      the baseline stores the mean and standard deviation across sub-windows.</li>
-  <li>Live values are then expressed as z-scores: <code>(live − mean) ÷ SD</code>.</li>
-</ol>
+<h3>How flooding is detected</h3>
+<p>
+  The app flags flooding when a partner's heart rate meets either of two criteria:
+</p>
+<ul>
+  <li>
+    <strong>Personal threshold:</strong> heart rate is 10% or more above the individual
+    resting baseline mean. This is the primary criterion and captures individual
+    differences — a person whose resting heart rate is 58 bpm floods at a different
+    absolute level than one whose resting rate is 80 bpm.
+  </li>
+  <li>
+    <strong>Absolute ceiling:</strong> heart rate reaches 95 bpm or above, which
+    serves as a floor for those with already-elevated baselines.
+  </li>
+</ul>
 
 <p>
-  The baseline indicator in the session header confirms when both baselines are set.
-  Baselines can be cleared and reset mid-session (e.g., if a partner needed to move
-  around before settling) using the "clear — A / B" buttons.
+  To avoid false alarms from momentary spikes — a cough, a shift in posture, a single
+  irregular beat — the flooding alert requires the threshold to be sustained for
+  at least <strong>ten continuous seconds</strong> before triggering. It clears
+  automatically when heart rate returns below the threshold.
 </p>
 
-<div class="callout">
-  <strong>Timing recommendation</strong>
-  Allow at least 2 minutes of quiet sitting before setting the baseline — sensors
-  need time to settle and the nervous system needs time to shift toward resting
-  tone. The state description and activation index are not available until the
-  baseline is set.
+<div class="callout danger">
+  <strong>When the flood alert appears</strong>
+  A red banner names the flooded partner and offers a one-click link to the recovery
+  screen. Gottman's research suggests that norepinephrine — the primary stress
+  neurochemical activated during flooding — takes approximately 20 minutes to clear,
+  even after the stressor stops [3]. A break shorter than that often fails to produce
+  genuine physiological recovery, and the conversation resumes from an essentially
+  unchanged physiological state.
 </div>
 
-<!-- ═══════════════════════════════════════════════════════════════ §10 -->
-<h2><span class="section-num">§ 10</span>Recovery Mode — Guided Breathing</h2>
+<h3>What to do</h3>
+<p>
+  When flooding is detected, treat it as a clinical signal rather than a crisis.
+  Name what the body is showing without alarming language — something like: <em>"I'm
+  noticing that your body is working hard right now. Let's take a genuine break
+  before we continue."</em> Navigate to the recovery screen together. Both partners
+  should participate in the breathing exercise — co-regulated physiological recovery
+  is itself a relational act [13], and the dyadic synchrony data often shows this
+  clearly.
+</p>
+
+<!-- ═══════════════════════════════════════════════════════════════ §6 -->
+<h2><span class="section-num">§ 6</span>The Recovery Break</h2>
 
 <p>
-  The recovery screen is a standalone physiological break tool. It provides
-  paced breathing with visual animation, ambient pink noise, and live coherence
-  biofeedback. The therapist navigates there by clicking "recovery mode →" or
-  pressing <code>r</code>; return to the session view with the "← back" link or
-  <code>Escape</code>.
+  The recovery screen (press <code>r</code> or click "recovery mode →") is a
+  dedicated physiological break tool. It offers paced breathing with a visual
+  animation, ambient sound, and live coherence feedback for both partners. The
+  goal is genuine autonomic down-regulation — a measurable shift in the physiology —
+  not just a pause in talking.
 </p>
 
 <h3>Breathing patterns</h3>
+
 <table>
   <thead>
-    <tr><th>Pattern</th><th>Phases (in / hold / out / hold)</th><th>Rate</th><th>Rationale</th></tr>
+    <tr><th>Pattern</th><th>Rhythm</th><th>Rate</th><th>Rationale</th></tr>
   </thead>
   <tbody>
     <tr>
-      <td><strong>Coherence</strong></td>
+      <td><strong>Coherence</strong> (recommended)</td>
       <td>5.5 s in / 5.5 s out</td>
-      <td>5.5 breaths/min</td>
-      <td>Near the cardiovascular resonance frequency — maximizes RSA and coherence [13].</td>
+      <td>~5.5 breaths/min</td>
+      <td>Near the cardiovascular resonance frequency — maximizes heart rhythm coherence and vagal tone [14, 15]. The most reliable physiological down-regulator.</td>
     </tr>
     <tr>
       <td><strong>Box</strong></td>
-      <td>4 s / 4 s / 4 s / 4 s</td>
+      <td>4 s in / 4 s hold / 4 s out / 4 s hold</td>
       <td>~4 breaths/min</td>
-      <td>Military-derived protocol; equal-phase structure supports focus and stabilization.</td>
+      <td>Equal-phase structure supports focus and stabilization. Useful when partners are finding it hard to slow down enough for coherence breathing.</td>
     </tr>
     <tr>
       <td><strong>4-7-8</strong></td>
-      <td>4 s / 7 s / 8 s</td>
+      <td>4 s in / 7 s hold / 8 s out</td>
       <td>~3 breaths/min</td>
-      <td>Extended exhalation activates the parasympathetic system; long hold builds CO₂ tolerance [14].</td>
+      <td>Extended exhalation strongly activates the parasympathetic system [16]. Best for high-activation states where coherence breathing alone isn't slowing the physiology.</td>
     </tr>
   </tbody>
 </table>
 
 <p>
-  The breathing animation uses an SVG arc and an expanding circle. The arc
-  fills clockwise over the inhale phase and resets at the start of each new cycle,
-  giving an intuitive visual target. A countdown shows the remaining seconds in
-  the current phase.
+  The breathing circle expands and contracts with the target pattern. A countdown
+  shows remaining seconds in each phase. Ambient pink noise can be toggled on —
+  its natural sound texture supports attentional defocusing, which itself helps
+  shift the nervous system away from the ruminative rehearsal that sustains flooding [17].
 </p>
 
-<h3>Ambient pink noise</h3>
+<h3>Reading recovery progress</h3>
 <p>
-  The optional ambient sound is generated entirely in the browser using the Web Audio
-  API. A 20-second stereo pink noise buffer is computed using the Voss-McCartney
-  algorithm — a sequence of summed white noise generators at octave-spaced update
-  rates that produces the characteristic <em>1/f</em> power spectral density of
-  natural sounds. The buffer is low-pass filtered at 700 Hz and looped continuously
-  with a 100 ms crossfade to avoid audible clicks at the loop boundary.
+  Coherence typically takes 2–3 minutes of paced breathing to rise noticeably.
+  Expect the first cycle or two to show little change — the body needs time to
+  entrain. Watch the coherence bars and trend arrows (↑ / → / ↓) for both partners.
+  Rising coherence is the most direct confirmation that the breathing exercise is
+  engaging the autonomic system.
 </p>
 <p>
-  Pink noise (rather than white noise or nature recordings) is used because its
-  1/f power distribution closely matches natural environmental soundscapes and has
-  been shown to support relaxation and attentional defocusing [15].
+  When both partners' activation scores drop below 35 and stay there, a
+  <strong>calm zone timer</strong> appears on screen showing how long that
+  sustained regulation has held. This timer — not the wall clock — is the
+  readiness signal. A partner who has been in the calm zone for 2–3 minutes is
+  physiologically ready to re-engage with difficult material. One who has been
+  sitting quietly for 20 minutes but is still at activation 60 is not.
 </p>
 
-<h3>Readiness indicator</h3>
-<p>
-  When both partners' activation scores drop below 35 and remain there, a green
-  readiness block appears showing the elapsed calm time. This is the signal that
-  genuine physiological recovery has occurred and conversation can safely resume.
-</p>
-
-<!-- ═══════════════════════════════════════════════════════════════ §11 -->
-<h2><span class="section-num">§ 11</span>Interpretation Guide for Clinicians</h2>
-
-<h3>At the start of a session</h3>
-<ul>
-  <li>Give sensors 1–2 minutes to stabilize before setting the baseline.</li>
-  <li>Signal quality dots should be green (≥90%) before proceeding. If yellow or red, check sensor placement and contact.</li>
-  <li>The state description should read "low activation, stable" if the person is genuinely at rest. If it reads "moderate" at rest, the baseline may have been captured during mild anxiety — consider resetting.</li>
-</ul>
-
-<h3>During a session</h3>
-<ul>
-  <li>Watch the <strong>direction</strong> indicator first — "rising" on both partners during a difficult topic is an early warning, even if the scores are still moderate.</li>
-  <li>The <strong>coherence</strong> tile often drops before heart rate rises significantly — loss of organized heart rhythm can precede conscious awareness of stress.</li>
-  <li>A <strong>flooded</strong> badge means heart rate is more than 10% above the personal baseline. At this level, Gottman's research suggests the person cannot reliably engage empathically. Call a break before the conversation continues to escalate.</li>
-  <li>The <strong>dyadic panel</strong> is most useful when both partners are still regulated — it can reveal who is physiologically leading the escalation before either individual reaches flooding threshold.</li>
-</ul>
-
-<h3>During a recovery break</h3>
-<ul>
-  <li>Both partners should follow the same breathing pattern together.</li>
-  <li>Coherence typically takes 2–3 minutes to rise noticeably. Expect the first cycle or two to show little change.</li>
-  <li>The calm-zone timer is a better guide than wall clock time — wait for it to appear and accumulate before resuming conversation.</li>
-  <li>If a partner's coherence is not rising after 5+ minutes of paced breathing, they may be too cognitively engaged with the unresolved conflict. A brief structured distraction (a simple task, a change of room) may be needed.</li>
-</ul>
-
-<h3>Quick reference — what each change means</h3>
-<table>
-  <thead>
-    <tr><th>What you see</th><th>What it likely reflects</th></tr>
-  </thead>
-  <tbody>
-    <tr><td>Heart rate rising, HRV falling</td><td>Sympathetic activation — stress, engagement, or effort</td></tr>
-    <tr><td>Coherence falling</td><td>Autonomic disorganization — early stress response, often before heart rate changes</td></tr>
-    <tr><td>Respiration rate rising (&gt;20/min)</td><td>Shallow breathing — often accompanies anxiety or suppressed emotion</td></tr>
-    <tr><td>Flooded badge</td><td>Heart rate &gt;10% above personal resting — physiological flooding, break indicated</td></tr>
-    <tr><td>High synchrony, both regulated</td><td>Positive physiological co-regulation</td></tr>
-    <tr><td>High synchrony, both flooded</td><td>Locked in conflict — physiological amplification</td></tr>
-    <tr><td>Calm zone timer running</td><td>Genuine physiological recovery in progress</td></tr>
-  </tbody>
-</table>
-
-<!-- ═══════════════════════════════════════════════════════════════ §12 -->
-<h2><span class="section-num">§ 12</span>Limitations and Important Caveats</h2>
-
-<div class="callout danger">
-  <strong>This is a research prototype, not a validated clinical instrument.</strong>
-  The thresholds, weights, and algorithms described here represent reasonable
-  implementations of published methods. They have not been validated in a clinical
-  trial with couples therapy populations. Do not use scores as diagnostic criteria
-  or to make clinical decisions without therapist judgment.
+<div class="callout">
+  <strong>If coherence isn't rising after 5+ minutes</strong>
+  Rumination about the unresolved conflict is likely maintaining the sympathetic
+  state. Fredrickson and Levenson's research showed that positive emotions — even
+  mild ones — meaningfully accelerate cardiovascular recovery from stress [18].
+  A brief structured distraction (a simple shared task, a change of room, a
+  neutral topic) is often more effective than continued breathing when rumination
+  is keeping the physiology elevated.
 </div>
 
-<h4>PPG vs. ECG</h4>
+<!-- ═══════════════════════════════════════════════════════════════ §7 -->
+<h2><span class="section-num">§ 7</span>After the Session: The Session Log</h2>
+
 <p>
-  Consumer heart rate monitors use photoplethysmography (PPG) — an optical
-  sensor — rather than electrocardiography (ECG). PPG-derived R–R intervals
-  have higher noise and are more susceptible to movement artifact. The ectopic
-  filter helps, but during vigorous movement or if the sensor is loose, signal
-  quality will degrade.
+  The app continuously records the session to a structured log file. Everything you
+  need to review what happened is captured there. To download it, click the
+  <strong>↓ download log</strong> button that appears in the transcript panel
+  once recording has begun.
 </p>
 
-<h4>No respiration sensor</h4>
+<h3>What the log contains</h3>
 <p>
-  Respiration rate is derived from the heart rate signal, not measured directly.
-  RSA-based respiration rate estimation is unreliable during continuous speech,
-  irregular breathing, or rates below 9 breaths/min. The HF power metric
-  similarly loses its "vagal activity" interpretation during slow breathing.
+  The session log is a JSON file that includes three layers of information:
 </p>
 
-<h4>Individual differences</h4>
+<ul>
+  <li>
+    <strong>Transcript events.</strong> Each speech segment is recorded with the
+    speaker's name, the text, and a snapshot of both partners' full physiological
+    state at the moment the utterance ended. A second snapshot captured 15 seconds
+    later records the autonomic response to what was said — the body reacts to
+    emotionally significant speech on a 5–30 second timescale, so this response
+    window captures the beginning of that reaction.
+  </li>
+  <li>
+    <strong>Metric snapshots.</strong> Every 30 seconds throughout the session,
+    a complete physiological record is written — heart rate, heart rhythm variability,
+    vagal activity, coherence, respiration rate, activation score, confidence, and
+    the state description for each partner. These give you a full time series of
+    the session's physiological arc, even during silences between utterances.
+  </li>
+  <li>
+    <strong>Lifecycle events.</strong> Timestamped records of every significant
+    event: when sensors connected or disconnected, when baselines were set or cleared,
+    when voice enrollment occurred, and when flooding started and ended (including
+    the heart rate and percentage above baseline at each transition).
+  </li>
+</ul>
+
 <p>
-  HRV declines with age, is suppressed by beta-blockers and other cardiac
-  medications, varies with fitness level, time of day, and caffeine intake.
-  The personalized baseline adjusts for the individual's state at the start
-  of that session, but does not account for day-to-day or medication-driven
-  variation in the absolute values.
+  The downloaded file is readable by any tool that handles JSON — it can be opened
+  in a spreadsheet, analyzed with Python or R, or submitted to an AI assistant for
+  summary and pattern identification. The metric guide embedded in the file explains
+  every field for any downstream reader.
 </p>
 
-<h4>Dyadic synchrony interpretation</h4>
+<div class="callout">
+  <strong>Reviewing with an AI assistant</strong>
+  The session log is structured for AI-assisted analysis. You can share it with
+  Claude or a similar assistant and ask questions like: <em>"Which utterances were
+  followed by the largest physiological response? When during the session was Partner A
+  regulated while Partner B was activated? How long did the recovery break take to
+  bring both partners into the calm zone?"</em> The response window data is especially
+  useful — it reveals which moments in the conversation produced significant body reactions,
+  independent of what either partner reported feeling.
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════════ §8 -->
+<h2><span class="section-num">§ 8</span>The Science Behind the Signals</h2>
+
+<h3>Why heart rate variability matters</h3>
+
 <p>
-  The dyadic coupling signal should be treated as exploratory, not diagnostic.
-  Cross-correlation measures statistical association, not causal influence.
-  Two people in the same room will show some synchrony simply from shared
-  environmental events. Without a surrogate comparison baseline, the clinical
-  meaning of a specific r value cannot be established rigorously.
+  The heart does not beat like a metronome. Even at a steady average rate, the
+  interval between successive beats varies continuously — speeding slightly with
+  each inhalation, slowing with each exhalation, and fluctuating in response to
+  emotional, cognitive, and social inputs. This variability is not noise; it is
+  the signature of an active, adaptive nervous system. Loss of variability — a
+  flat, metronomic rhythm — reflects a system under stress or constraint [5].
 </p>
 
-<h4>Emotional interpretation</h4>
 <p>
-  The app describes body state, not emotion. "High activation, rising" means the
-  body is in a mobilized state — it does not distinguish excitement from anger,
-  or effort from anxiety. The therapist's relational attunement remains the
-  primary interpretive instrument.
+  The parasympathetic (vagal) branch of the autonomic nervous system is the primary
+  driver of this variability on the beat-to-beat timescale. When we feel safe and
+  connected, the vagus nerve actively modulates the heart, producing the rich
+  variability that enables responsive, nuanced social engagement [19]. Under threat
+  or stress, vagal tone is withdrawn rapidly — within a few beats — and the sympathetic
+  system takes over, raising heart rate and suppressing variability in preparation
+  for mobilization.
+</p>
+
+<p>
+  Stephen Porges's polyvagal theory provides a framework for understanding why this
+  matters in couples therapy specifically [19]: the same vagal system that produces
+  heart rhythm variability also regulates the facial muscles of expression, the
+  muscles of the middle ear (that attune to human voices), and the prosodic qualities
+  of the voice. When vagal tone is high, partners can hear each other's emotional
+  nuance, read facial expressions accurately, and modulate their own affect. When
+  vagal tone is withdrawn under stress, all of these capacities narrow. Physiological
+  regulation is not separate from relational presence — it is its substrate.
+</p>
+
+<h3>Flooding and the biology of a break</h3>
+
+<p>
+  Gottman's research defined flooding as the state in which sympathetic arousal is
+  so high that organized, empathic responding becomes physiologically impossible [3].
+  The mechanism is well-established: the sympathetic nervous system releases
+  epinephrine and norepinephrine, which accelerate heart rate, suppress digestive
+  and immune function, and shift attentional processing toward threat detection.
+  Cognitive flexibility, accurate mentalizing, and the capacity to hear nuance all
+  depend on prefrontal-limbic circuits that are progressively downregulated under
+  high sympathetic load [12].
+</p>
+
+<p>
+  The reason a 20-minute break is specified — rather than a 5-minute one — is
+  pharmacological. Norepinephrine has a biological half-life of several minutes in
+  the bloodstream, and its effects on cognition persist longer than its circulating
+  concentration. A couple who pauses for five minutes and then resumes conversation
+  is often resuming from an essentially unchanged physiological state. The calm-zone
+  timer in the recovery screen exists precisely to make this visible: conversation
+  should not resume until the physiology has actually shifted, not merely paused.
+</p>
+
+<h3>Cardiac coherence and resonance breathing</h3>
+
+<p>
+  Cardiac coherence refers to the degree to which the heart rhythm oscillates in
+  a single, organized frequency rather than fragmented, multi-frequency variation.
+  Rollin McCraty and colleagues at the HeartMath Institute established that high
+  coherence — a smooth, large-amplitude rhythm oscillation — reflects a coordinated
+  state of the heart-brain system associated with reduced cortisol, improved
+  cognitive flexibility, and greater emotional regulation [9].
+</p>
+
+<p>
+  The most reliable way to raise coherence deliberately is resonance breathing — slow
+  paced breathing near 5–6 breaths per minute, which matches the natural resonant
+  frequency of the cardiovascular system. At this rate, each breath cycle
+  synchronizes with the natural oscillation of blood pressure and heart rate,
+  producing a large-amplitude, coherent heart rhythm oscillation that maximizes
+  vagal activity [14, 15]. Heart rate variability biofeedback at this frequency
+  has a substantial evidence base for reducing anxiety, improving emotional regulation,
+  and supporting recovery from stress [20].
+</p>
+
+<h3>Dyadic physiology and co-regulation</h3>
+
+<p>
+  The observation that people in close relationships show correlated physiological
+  states — known as physiological linkage or coregulation — has been replicated
+  across many research groups [10, 11, 13]. The quality of that linkage differs
+  importantly between distressed and non-distressed couples: in healthy couples,
+  physiological coupling tends to be mild, flexible, and bidirectional — a gentle
+  social regulation. In distressed couples, coupling under conflict can become
+  rigid and amplifying, with each partner's escalation feeding the other's [2, 21].
+</p>
+
+<p>
+  This distinction is what the dyadic coupling panel is designed to illuminate.
+  High synchrony during a calm period is a different signal from high synchrony
+  during conflict. The latter — where both physiologies are escalating together —
+  is the pattern Gottman described as the physiological substrate of gridlocked,
+  unresolvable conflict [3].
+</p>
+
+<!-- ═══════════════════════════════════════════════════════════════ §9 -->
+<h2><span class="section-num">§ 9</span>What the Tool Cannot Tell You</h2>
+
+<div class="callout danger">
+  <strong>Research prototype — not a validated clinical instrument</strong>
+  The thresholds, algorithms, and interpretive frameworks in this application represent
+  reasonable implementations of published methods. They have not been validated in a
+  clinical trial with couples therapy populations. Do not treat scores as diagnostic
+  criteria or use them to make clinical decisions independent of therapist judgment.
+</div>
+
+<h4>Body signals are not emotion labels</h4>
+<p>
+  "High activation, rising" means the body is in a mobilized physiological state.
+  It does not distinguish excitement from anger, effort from anxiety, or the
+  physiological correlates of intense positive engagement from those of distress.
+  The direction and context of the activation — what was just said, what topic is
+  active, what each partner's face and voice are doing — is necessary to interpret
+  the number. Never read a score to a client as a verdict about their emotional state.
+</p>
+
+<h4>Sensors and movement</h4>
+<p>
+  Consumer Bluetooth heart rate monitors use optical or electrical sensors that are
+  susceptible to movement artifact. If a partner shifts in their seat, laughs
+  vigorously, or the strap slips, signal quality will momentarily degrade and metrics
+  will become unreliable. The signal quality indicator tells you when to discount
+  the numbers; the flooding alert requires ten seconds of sustained threshold-crossing
+  specifically to reduce the impact of momentary artifacts.
+</p>
+
+<h4>Individual biological variation</h4>
+<p>
+  Heart rate variability declines with age, is suppressed by beta-blockers and certain
+  antidepressants, varies with fitness, menstrual cycle phase, caffeine, and chronic
+  stress. The personalized baseline adjusts for each partner's state at the start of
+  that session, but does not account for medication effects or day-to-day biological
+  variation. A partner on a beta-blocker will show compressed HRV values that have
+  different meaning than the same values in an unmedicated person.
+</p>
+
+<h4>Respiration measurement</h4>
+<p>
+  Breathing rate is inferred from the heart rate signal, not measured directly.
+  This estimate is unreliable when someone is speaking continuously (because speech
+  disrupts the normal breathing pattern), when breathing very slowly (below 9
+  breaths per minute, the signal migrates out of the detectable frequency range),
+  or when heart rhythm variability is very low (there is less signal to detect).
+  Use it as a guide during recovery breathing exercises, not as a clinical measurement
+  during conversation.
+</p>
+
+<h4>Dyadic coupling interpretation</h4>
+<p>
+  Cross-correlation measures statistical association, not causal influence. Two
+  people in the same room will show some physiological correlation simply from
+  shared environmental events — a sound outside, a change in room temperature, a
+  shift in the conversation's emotional tone affecting both simultaneously. Without
+  comparison against a non-partner baseline from the same session, a specific
+  correlation value cannot be interpreted rigorously. The dyadic panel is most
+  useful as a qualitative indicator of relational dynamics and trajectory, not as
+  a precise measurement.
 </p>
 
 <!-- ═══════════════════════════════════════════════════════════════ REFS -->
@@ -1079,18 +1015,18 @@ code {
     63(2), 221–233.
   </li>
   <li>
-    Gottman JM, Levenson RW. (1988). The social psychophysiology of marriage.
-    In P Noller &amp; MA Fitzpatrick (Eds.), <em>Perspectives on Marital Interaction</em>
-    (pp. 182–200). Multilingual Matters.
+    Levenson RW, Gottman JM. (1983). Marital interaction: Physiological linkage and
+    affective exchange. <em>Journal of Personality and Social Psychology</em>, 45(3), 587–597.
   </li>
   <li>
     Gottman JM. (1994). <em>What Predicts Divorce? The Relationship Between Marital
     Processes and Marital Outcomes.</em> Lawrence Erlbaum Associates.
   </li>
   <li>
-    Lippman N, Stein KM, Lerman BB. (1994). Comparison of methods for removal of
-    ectopy in measurement of heart rate variability. <em>American Journal of Physiology —
-    Heart and Circulatory Physiology</em>, 267(1), H411–H418.
+    Task Force of the European Society of Cardiology and the North American Society
+    of Pacing and Electrophysiology. (1996). Heart rate variability: Standards of
+    measurement, physiological interpretation, and clinical use.
+    <em>Circulation</em>, 93(5), 1043–1065.
   </li>
   <li>
     Appelhans BM, Luecken LJ. (2006). Heart rate variability as an index of regulated
@@ -1098,17 +1034,16 @@ code {
   </li>
   <li>
     Esco MR, Flatt AA. (2014). Ultra-short-term heart rate variability indexes at rest
-    and post-exercise in athletes: Evaluating the agreement with accepted recommendations.
-    <em>Journal of Sports Science &amp; Medicine</em>, 13(3), 535–541.
+    and post-exercise in athletes. <em>Journal of Sports Science &amp; Medicine</em>, 13(3), 535–541.
   </li>
   <li>
     Eckberg DL. (1983). Human sinus arrhythmia as an index of vagal cardiac outflow.
     <em>Journal of Applied Physiology</em>, 54(4), 961–966.
   </li>
   <li>
-    Laguna P, Moody GB, Mark RG. (1998). Power spectral density of unevenly sampled data
-    by least-square analysis: performance and application to heart rate signals.
-    <em>IEEE Transactions on Biomedical Engineering</em>, 45(6), 698–715.
+    Grossman P, Taylor EW. (2007). Toward understanding respiratory sinus arrhythmia:
+    Relations to cardiac vagal tone, evolution and biobehavioral functions.
+    <em>Biological Psychology</em>, 74(2), 263–285.
   </li>
   <li>
     McCraty R, Atkinson M, Tomasino D, Bradley RT. (2009). The coherent heart:
@@ -1116,18 +1051,29 @@ code {
     system-wide order. <em>Integral Review</em>, 5(2), 10–115.
   </li>
   <li>
+    Butler EA. (2011). Temporal interpersonal emotion systems: The "TIES" that form
+    relationships. <em>Personality and Social Psychology Review</em>, 15(4), 367–393.
+  </li>
+  <li>
     Reed RG, Randall AK, Butler EA. (2016). Dyadic physiological linkage and relationship
     quality. In JA Coan &amp; JJB Allen (Eds.), <em>Handbook of Emotion Elicitation and
     Assessment</em>. Oxford University Press.
   </li>
   <li>
-    Butler EA. (2011). Temporal interpersonal emotion systems: The "TIES" that form
-    relationships. <em>Personality and Social Psychology Review</em>, 15(4), 367–393.
+    Gottman JM, Driver J, Tabares A. (2002). Building the sound marital house:
+    An empirically derived couple therapy. In AS Gurman &amp; NS Jacobson (Eds.),
+    <em>Clinical Handbook of Couple Therapy</em> (3rd ed., pp. 373–399). Guilford Press.
   </li>
   <li>
-    Randall AK, Post JH, Reed RG, Butler EA. (2013). Cooperating with your romantic
-    partner: Associations with interpersonal emotion coordination. <em>Journal of Social
-    and Personal Relationships</em>, 30(8), 1072–1095.
+    Sbarra DA, Hazan C. (2008). Coregulation, dysregulation, self-regulation:
+    An integrative analysis and empirical agenda for understanding adult attachment,
+    separation, loss, and recovery. <em>Personality and Social Psychology Review</em>,
+    12(2), 141–167.
+  </li>
+  <li>
+    Lehrer PM, Vaschillo E, Vaschillo B. (2000). Resonant frequency biofeedback training
+    to increase cardiac variability: Rationale and manual for training.
+    <em>Applied Psychophysiology and Biofeedback</em>, 25(3), 177–191.
   </li>
   <li>
     Lehrer PM, Gevirtz R. (2014). Heart rate variability biofeedback: How and why does
@@ -1139,20 +1085,28 @@ code {
     <em>Frontiers in Human Neuroscience</em>, 12, 353.
   </li>
   <li>
-    Bhatt R, Bhattacharya J. (2016). Effect of pink noise on cognitive performance.
-    <em>Journal of Cognitive Enhancement</em> (various related literature). See also:
-    Lu H, et al. (2012). Pink noise is beneficial to sleep and cognitive function via
-    attenuating age-related changes in brain electrical activity. <em>Journal of Neuroscience</em>.
+    Christoff K, Gordon AM, Smallwood J, Smith R, Schooler JW. (2009). Experience
+    sampling during fMRI reveals default network and executive system contributions
+    to mind wandering. <em>Proceedings of the National Academy of Sciences</em>,
+    106(21), 8719–8724.
   </li>
   <li>
-    Task Force of the European Society of Cardiology and the North American Society
-    of Pacing and Electrophysiology. (1996). Heart rate variability: Standards of
-    measurement, physiological interpretation, and clinical use.
-    <em>Circulation</em>, 93(5), 1043–1065.
+    Fredrickson BL, Levenson RW. (1998). Positive emotions speed recovery from the
+    cardiovascular sequelae of negative emotions. <em>Cognition and Emotion</em>,
+    12(2), 191–220.
   </li>
   <li>
     Porges SW. (2011). <em>The Polyvagal Theory: Neurophysiological Foundations of
     Emotions, Attachment, Communication, and Self-Regulation.</em> W.W. Norton.
+  </li>
+  <li>
+    Gevirtz R. (2013). The promise of heart rate variability biofeedback: Evidence-based
+    applications. <em>Biofeedback</em>, 41(3), 110–120.
+  </li>
+  <li>
+    Randall AK, Post JH, Reed RG, Butler EA. (2013). Cooperating with your romantic
+    partner: Associations with interpersonal emotion coordination. <em>Journal of Social
+    and Personal Relationships</em>, 30(8), 1072–1095.
   </li>
 </ol>
 </div>

@@ -64,7 +64,8 @@ def activation_state(
     0–100 activation score per spec §4.5.
     Returns dict with activation, direction, confidence, flooded.
     """
-    z = {k: baseline.z(k, metrics[k]) for k in metrics if k in baseline.stats}
+    z = {k: float(np.clip(baseline.z(k, metrics[k]), -2.5, 2.5))
+         for k in metrics if k in baseline.stats}
 
     slow_breathing = metrics.get("resp_rate", 99) < 9
     vagal = -z.get("rmssd", 0) if slow_breathing else -(z.get("rmssd", 0) + z.get("hf", 0)) / 2
@@ -419,6 +420,13 @@ class PartnerProcessor:
         self._trace_act.clear()
         self._trace_act_t.clear()
 
+    def reconnect_snapshot(self) -> dict:
+        """Return current trace data for immediate WebSocket reconnect replay."""
+        return {
+            "trace_hr":         list(self._trace_hr),
+            "trace_activation": [round(v, 1) for v in self._trace_act],
+        }
+
     # ── for dyadic use ────────────────────────────────────────────────────────
 
     def hr_series(self, win_s: float = 60.0):
@@ -476,6 +484,7 @@ class DyadicProcessor:
         result = windowed_lagged_xcorr(hr_a_even, hr_b_even, FS, max_lag_s=4.0)
         peak_r = result["peak_r"]
         lag_s  = result["lag_s"]
+        r_values = [round(v, 3) for v in result.get("r_values", [])]
 
         phase = "in-phase" if peak_r >= 0 else "anti-phase"
         # positive lag_s = A leads B; negative = B leads A
@@ -488,8 +497,10 @@ class DyadicProcessor:
 
         return [{
             "type": "dyadic",
-            "peak_r": round(float(peak_r), 3),
-            "lag_s": round(float(lag_s), 2),
-            "phase": phase,
-            "leader": leader,
+            "peak_r":    round(float(peak_r), 3),
+            "lag_s":     round(float(lag_s), 2),
+            "phase":     phase,
+            "leader":    leader,
+            "r_values":  r_values,
+            "lag_step_s": result.get("lag_step_s", 0.25),
         }]

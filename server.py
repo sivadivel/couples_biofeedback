@@ -18,6 +18,7 @@ from aiohttp import web, WSMsgType
 from processor import PartnerProcessor, DyadicProcessor
 from transcription import transcribe_audio
 from voice_id import get_embedding, identify
+from emotion import classify_emotion
 
 STATIC_DIR = Path(__file__).parent / "static"
 
@@ -261,6 +262,39 @@ class BiofeedbackServer:
             await ws.send_str(json.dumps({
                 "type": "battery", "partner": partner, "level": level
             }))
+        # Replay last known mid/slow snapshots so the page populates immediately
+        # without waiting up to 10 s for the next metrics cycle.
+        for p_id, proc in (("A", self.proc_a), ("B", self.proc_b)):
+            if proc is None:
+                continue
+            snap = self._metrics_snapshot[p_id]
+            traces = proc.reconnect_snapshot()
+            if snap.get("mean_hr") is not None:
+                await ws.send_str(json.dumps({
+                    "type":           "mid",
+                    "partner":        p_id,
+                    "mean_hr":        snap.get("mean_hr"),
+                    "rmssd":          snap.get("rmssd"),
+                    "hr_baseline_pct": snap.get("hr_baseline_pct"),
+                    "flooded":        snap.get("flooded", False),
+                    "calm_zone_s":    snap.get("calm_zone_s", 0),
+                    "signal_quality": snap.get("signal_quality"),
+                    "trace_hr":       traces["trace_hr"],
+                }))
+            if snap.get("activation") is not None or snap.get("hf") is not None:
+                await ws.send_str(json.dumps({
+                    "type":              "slow",
+                    "partner":           p_id,
+                    "hf":                snap.get("hf"),
+                    "coherence":         snap.get("coherence"),
+                    "resp_rate":         snap.get("resp_rate"),
+                    "activation":        snap.get("activation"),
+                    "direction":         snap.get("direction"),
+                    "confidence":        snap.get("confidence"),
+                    "state_description": snap.get("state_description"),
+                    "calm_zone_s":       snap.get("calm_zone_s", 0),
+                    "trace_activation":  traces["trace_activation"],
+                }))
         try:
             async for msg in ws:
                 if msg.type == WSMsgType.TEXT:
@@ -435,7 +469,8 @@ class BiofeedbackServer:
         rec.update(extra)
         self._session_file.write(json.dumps(rec) + "\n")
 
-    def _append_transcript_event(self, text: str, speaker: str | None = None) -> dict:
+    def _append_transcript_event(self, text: str, speaker: str | None = None,
+                                 emotion: dict | None = None) -> dict:
         self._open_session_log()
         now_mono = time.monotonic()
         utterance_start = now_mono - 5.0  # chunk is 5s; approximate utterance start
@@ -449,6 +484,7 @@ class BiofeedbackServer:
             "session_elapsed_s": elapsed,
             "text": text,
             "speaker": speaker,
+            "emotion": emotion or {"tone": "neutral", "confidence": 1.0, "note": ""},
             "pre_metrics": pre_metrics,
             "metrics": snapshot,
         }
@@ -483,9 +519,12 @@ class BiofeedbackServer:
         print(f"[transcribe] whisper → {repr(text[:120]) if text else '(empty)'}")
         if not text:
             return web.Response(content_type="application/json", text='{"text":""}')
+        emotion_task = asyncio.create_task(classify_emotion(text))
         speaker, sims = identify(embedding, self._voice_enrollments)
         print(f"[transcribe] speaker → {speaker}  sims={sims}")
-        event = self._append_transcript_event(text, speaker)
+        emotion = await emotion_task
+        print(f"[transcribe] emotion → {emotion}")
+        event = self._append_transcript_event(text, speaker, emotion=emotion)
         asyncio.create_task(self._schedule_response_patch(event["seq"], time.monotonic()))
         await self.broadcast({"type": "transcript", **event})
         return web.Response(

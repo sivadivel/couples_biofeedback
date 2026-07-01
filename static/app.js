@@ -32,6 +32,7 @@ const state = {
     trace_times: [],
     baseline_set: false,
     calm_zone_s: 0,
+    tone_counts: { aggressive: 0, neutral: 0, kind: 0 },
   },
   B: {
     name: "Partner B",
@@ -56,12 +57,15 @@ const state = {
     trace_times: [],
     baseline_set: false,
     calm_zone_s: 0,
+    tone_counts: { aggressive: 0, neutral: 0, kind: 0 },
   },
   dyadic: {
     peak_r: null,
     lag_s: null,
     phase: null,
     leader: null,
+    r_values: [],
+    lag_step_s: 0.25,
   },
 };
 
@@ -159,12 +163,13 @@ function handleMessage(data) {
       break;
 
     case "dyadic":
-      state.dyadic.peak_r = data.peak_r;
-      state.dyadic.lag_s  = data.lag_s;
-      state.dyadic.phase  = data.phase;
-      state.dyadic.leader = data.leader;
+      state.dyadic.peak_r    = data.peak_r;
+      state.dyadic.lag_s     = data.lag_s;
+      state.dyadic.phase     = data.phase;
+      state.dyadic.leader    = data.leader;
+      state.dyadic.r_values  = data.r_values  ?? [];
+      state.dyadic.lag_step_s = data.lag_step_s ?? 0.25;
       updateDyadicPanel();
-      redrawDualTrace();
       break;
 
     case "session_init":
@@ -288,6 +293,89 @@ function drawDualTrace(canvas, hrA, hrB, colorA, colorB) {
   drawLine(hrB, colorB);
 }
 
+function drawCorrelogram(canvas, d) {
+  if (!canvas) return;
+  const rv = d.r_values;
+  if (!rv || rv.length === 0) return;
+
+  const dpr = window.devicePixelRatio || 1;
+  const W = canvas.clientWidth, H = canvas.clientHeight;
+  if (W === 0 || H === 0) return;
+  if (canvas.width !== W * dpr || canvas.height !== H * dpr) {
+    canvas.width = W * dpr; canvas.height = H * dpr;
+  }
+  const ctx = canvas.getContext("2d");
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  ctx.clearRect(0, 0, W, H);
+
+  const isDark = document.documentElement.getAttribute("data-theme") === "dark";
+  const textColor     = isDark ? "#8896a8" : "#6c7a89";
+  const borderColor   = isDark ? "#333d52" : "#dde1e7";
+
+  const ML = 26, MR = 4, MT = 8, MB = 22;
+  const cW = W - ML - MR, cH = H - MT - MB;
+  const midY = MT + cH / 2;
+
+  // zero line
+  ctx.setLineDash([3, 3]);
+  ctx.strokeStyle = borderColor;
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  ctx.moveTo(ML, midY);
+  ctx.lineTo(ML + cW, midY);
+  ctx.stroke();
+  ctx.setLineDash([]);
+
+  // bars
+  const n = rv.length;
+  const slotW = cW / n;
+  const barW  = Math.max(1, slotW * 0.65);
+
+  // find peak index
+  let peakIdx = 0;
+  for (let i = 1; i < n; i++) if (Math.abs(rv[i]) > Math.abs(rv[peakIdx])) peakIdx = i;
+
+  // determine leader color for peak bar
+  const colorA = "#c0392b", colorB = "#1a6baa";
+  let peakColor = borderColor;
+  if (d.leader && d.leader !== "tied") {
+    peakColor = (d.leader === state.A.name) ? colorA : colorB;
+  }
+
+  for (let i = 0; i < n; i++) {
+    const r = rv[i];
+    const x = ML + i * slotW + (slotW - barW) / 2;
+    const barH = Math.abs(r) * cH / 2;
+    const y = r >= 0 ? midY - barH : midY;
+
+    if (i === peakIdx) {
+      ctx.fillStyle = peakColor;
+      ctx.globalAlpha = 0.9;
+    } else {
+      ctx.fillStyle = r >= 0 ? "rgba(22,160,133,0.35)" : "rgba(230,126,34,0.35)";
+      ctx.globalAlpha = 1.0;
+    }
+    ctx.fillRect(x, y, barW, barH || 1);
+    ctx.globalAlpha = 1.0;
+  }
+
+  // y-axis labels
+  ctx.fillStyle = textColor;
+  ctx.font = `9px system-ui, sans-serif`;
+  ctx.textAlign = "right";
+  ctx.textBaseline = "middle";
+  ctx.fillText("1", ML - 3, MT + 2);
+  ctx.fillText("0", ML - 3, midY);
+  ctx.fillText("−1", ML - 3, MT + cH - 2);
+
+  // x-axis labels
+  ctx.textAlign = "left";
+  ctx.textBaseline = "top";
+  ctx.fillText("← " + (state.B.name || "B"), ML, MT + cH + 3);
+  ctx.textAlign = "right";
+  ctx.fillText((state.A.name || "A") + " →", ML + cW, MT + cH + 3);
+}
+
 // ── Mode A DOM updates ────────────────────────────────────────────────────────
 
 function updateHeroHR(p) {
@@ -301,10 +389,10 @@ function updateHeroHR(p) {
   if (deltaEl) {
     if (s.hr_baseline_pct !== null && s.baseline_set) {
       const sign = s.hr_baseline_pct >= 0 ? "+" : "";
-      deltaEl.textContent = `${sign}${s.hr_baseline_pct}% vs baseline`;
+      deltaEl.textContent = `${sign}${s.hr_baseline_pct}%`;
       deltaEl.className = "hr-delta " + (s.hr_baseline_pct > 0 ? "over" : "under");
     } else {
-      deltaEl.textContent = "baseline not set";
+      deltaEl.textContent = "—";
       deltaEl.className = "hr-delta";
     }
   }
@@ -390,51 +478,57 @@ function redrawSparkline(p) {
 
 function updateDyadicPanel() {
   const d = state.dyadic;
+  const labelEl = document.getElementById("dyadic-state-label");
+  const bodyEl  = document.getElementById("dyadic-body");
+  if (!labelEl || !bodyEl) return;
 
-  const rEl = document.getElementById("dyadic-r");
-  if (rEl) rEl.textContent = d.peak_r !== null ? d.peak_r.toFixed(3) : "—";
+  const r = d.peak_r;
+  if (r === null) return;
 
-  const lagEl = document.getElementById("dyadic-lag");
-  if (lagEl) {
-    if (d.lag_s !== null && d.leader) {
-      const absLag = Math.abs(d.lag_s).toFixed(1);
-      lagEl.textContent = `${absLag}s · ${d.leader} leads`;
-    } else {
-      lagEl.textContent = "—";
-    }
+  const bothFlooded = state.A.flooded && state.B.flooded;
+  const anyFlooded  = state.A.flooded || state.B.flooded;
+  const A = state.A.name || "Partner A";
+  const B = state.B.name || "Partner B";
+  const leader   = d.leader;
+  const follower = leader === A ? B : leader === B ? A : null;
+  const lagText  = Math.abs(d.lag_s ?? 0).toFixed(1);
+  const inPhase  = d.phase === "in-phase";
+
+  let label, mod, body;
+
+  if (r >= 0.4 && bothFlooded) {
+    label = "co-escalation";
+    mod   = "danger";
+    body  = `${A} and ${B} are physiologically locked — high synchrony while both activated usually reflects co-escalation, not settling.`;
+  } else if (r >= 0.4 && inPhase && follower) {
+    label = "co-regulation signal";
+    mod   = "calm";
+    body  = `${leader} is pacing the room — ${follower}'s body is following about ${lagText} seconds behind, both moving in the same direction.`;
+  } else if (r >= 0.4 && inPhase) {
+    label = "co-regulation signal";
+    mod   = "calm";
+    body  = `Both nervous systems are moving in close sync with no clear leader — mutual physiological attunement.`;
+  } else if (r >= 0.4 && !inPhase) {
+    label = "anti-phase coupling";
+    mod   = "warning";
+    body  = `${A} and ${B} are moving in opposite directions — one activating as the other settles, about ${lagText} seconds apart.`;
+  } else if (r >= 0.2) {
+    label = "loose coupling";
+    mod   = "neutral";
+    body  = `Physiologies are loosely linked this window — some coordination, but the connection is weak.`;
+  } else {
+    label = "decoupled";
+    mod   = "neutral";
+    body  = `Nervous systems are moving independently — no meaningful synchrony detected this window.`;
   }
 
-  const phaseEl = document.getElementById("dyadic-phase");
-  if (phaseEl) phaseEl.textContent = d.phase || "—";
-
-  const interpEl = document.getElementById("dyadic-interp");
-  if (interpEl) {
-    const r = d.peak_r;
-    const bothFlooded = state.A.flooded && state.B.flooded;
-    const anyFlooded  = state.A.flooded || state.B.flooded;
-    let text = "";
-    if (r !== null) {
-      if (r < 0.2) {
-        text = "Physiologies moving independently.";
-      } else if (r >= 0.4 && bothFlooded) {
-        text = "High coupling while both flooded — locked in conflict, not co-regulation.";
-      } else if (r >= 0.4 && d.phase === "in-phase" && !anyFlooded) {
-        text = "Synchronized and both settled — co-regulation signal.";
-      } else if (r >= 0.4 && d.phase === "anti-phase") {
-        text = "Synchronized but moving in opposite directions.";
-      } else if (r >= 0.4) {
-        text = "Physiologies closely coupled.";
-      } else {
-        text = "Weak coupling — physiologies loosely linked.";
-      }
-    }
-    interpEl.textContent = text;
-  }
+  labelEl.textContent = label;
+  labelEl.className   = `dyadic-state-label dyadic-state-${mod}`;
+  bodyEl.textContent  = body;
 }
 
 function redrawDualTrace() {
-  const canvas = document.getElementById("dual-trace");
-  drawDualTrace(canvas, state.A.trace_hr, state.B.trace_hr, "#c0392b", "#1a6baa");
+  // no-op: dual trace canvas removed; kept so resize/mid handlers don't break
 }
 
 function drawActivationTrace(canvas, values) {
@@ -512,9 +606,102 @@ function drawActivationTrace(canvas, values) {
   }
 }
 
-function redrawActivationTrace(p) {
-  const canvas = document.getElementById(`act-trace-${p}`);
-  drawActivationTrace(canvas, state[p].trace_activation);
+function drawSharedActivationTrace(canvas, valsA, valsB, nameA, nameB, dirA, dirB) {
+  if (!canvas) return;
+  const dpr = window.devicePixelRatio || 1;
+  const W = canvas.clientWidth, H = canvas.clientHeight;
+  if (W === 0 || H === 0) return;
+  if (canvas.width !== W * dpr || canvas.height !== H * dpr) {
+    canvas.width = W * dpr; canvas.height = H * dpr;
+  }
+  const ctx = canvas.getContext("2d");
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  ctx.clearRect(0, 0, W, H);
+
+  const LABEL_W = 54, BOTTOM_PAD = 16;
+  const chartW = W - LABEL_W, chartH = H - BOTTOM_PAD;
+  const toY = (v) => chartH - (Math.min(Math.max(v, 0), 100) / 100) * chartH;
+
+  // zone bands
+  ctx.fillStyle = "#fdecea"; ctx.fillRect(0, 0,       chartW, toY(65));
+  ctx.fillStyle = "#fef5e7"; ctx.fillRect(0, toY(65), chartW, toY(35) - toY(65));
+  ctx.fillStyle = "#d5f5f0"; ctx.fillRect(0, toY(35), chartW, chartH - toY(35));
+
+  ctx.strokeStyle = "rgba(0,0,0,0.08)"; ctx.lineWidth = 1;
+  ctx.setLineDash([4, 4]);
+  [35, 65].forEach(v => {
+    ctx.beginPath(); ctx.moveTo(0, toY(v)); ctx.lineTo(chartW, toY(v)); ctx.stroke();
+  });
+  ctx.setLineDash([]);
+
+  const MAX_POINTS = 18;
+  const toX = (i) => (i / (MAX_POINTS - 1)) * chartW;
+
+  const drawTrace = (vals, color) => {
+    if (!vals || vals.length < 2) return;
+    ctx.beginPath();
+    ctx.moveTo(toX(0), toY(vals[0]));
+    for (let i = 1; i < vals.length; i++) ctx.lineTo(toX(i), toY(vals[i]));
+    ctx.strokeStyle = color; ctx.lineWidth = 2;
+    ctx.lineJoin = "round"; ctx.globalAlpha = 0.85;
+    ctx.stroke(); ctx.globalAlpha = 1.0;
+    const last = vals[vals.length - 1];
+    ctx.beginPath();
+    ctx.arc(toX(vals.length - 1), toY(last), 4, 0, Math.PI * 2);
+    ctx.fillStyle = color; ctx.fill();
+  };
+
+  drawTrace(valsA, "#c0392b");
+  drawTrace(valsB, "#1a6baa");
+
+  // right-edge labels (score + direction + name), with collision avoidance
+  const lastA = valsA && valsA.length ? valsA[valsA.length - 1] : null;
+  const lastB = valsB && valsB.length ? valsB[valsB.length - 1] : null;
+  const LABEL_H = 28; // height of each two-line label block
+
+  let yA = lastA !== null ? Math.max(LABEL_H / 2, Math.min(chartH - LABEL_H / 2, toY(lastA))) : null;
+  let yB = lastB !== null ? Math.max(LABEL_H / 2, Math.min(chartH - LABEL_H / 2, toY(lastB))) : null;
+
+  if (yA !== null && yB !== null && Math.abs(yA - yB) < LABEL_H) {
+    const mid = (yA + yB) / 2;
+    yA = Math.max(LABEL_H / 2, mid - LABEL_H / 2);
+    yB = Math.min(chartH - LABEL_H / 2, mid + LABEL_H / 2);
+  }
+
+  const drawLabel = (y, score, dir, name, color) => {
+    if (y === null) return;
+    const arrow = dir === "rising" ? " ↑" : dir === "falling" ? " ↓" : "";
+    ctx.textAlign = "left"; ctx.fillStyle = color;
+    ctx.font = `bold 12px system-ui, sans-serif`;
+    ctx.textBaseline = "alphabetic";
+    ctx.fillText(Math.round(score) + arrow, chartW + 5, y + 4);
+    ctx.font = `10px system-ui, sans-serif`;
+    ctx.globalAlpha = 0.65;
+    ctx.fillText(name || "", chartW + 5, y + 16);
+    ctx.globalAlpha = 1.0;
+  };
+
+  if (lastA !== null) drawLabel(yA, lastA, dirA, nameA || "A", "#c0392b");
+  if (lastB !== null) drawLabel(yB, lastB, dirB, nameB || "B", "#1a6baa");
+
+  // time axis
+  ctx.font = "10px sans-serif"; ctx.fillStyle = "rgba(0,0,0,0.4)"; ctx.textBaseline = "top";
+  [{ t: "−3m", i: 0, a: "left" }, { t: "−2m", i: 6, a: "center" },
+   { t: "−1m", i: 12, a: "center" }, { t: "now", i: MAX_POINTS - 1, a: "right" }]
+    .forEach(({ t, i, a }) => { ctx.textAlign = a; ctx.fillText(t, toX(i), chartH + 3); });
+}
+
+function redrawSharedTrace() {
+  drawSharedActivationTrace(
+    document.getElementById("shared-act-trace"),
+    state.A.trace_activation, state.B.trace_activation,
+    state.A.name, state.B.name,
+    state.A.direction, state.B.direction
+  );
+}
+
+function redrawActivationTrace(_p) {
+  redrawSharedTrace();
 }
 
 function applyPartnerNames() {
@@ -1158,8 +1345,11 @@ function appendTranscriptEvent(data) {
   // Physio line: shown for A/B speakers (or unknown), suppressed for Therapist
   const showPhysio = !isTherapist && parts.length > 0;
 
+  const emotion = data.emotion || {};
+  const tone = (emotion.tone && !isTherapist) ? emotion.tone : "neutral";
+
   const entry = document.createElement("div");
-  entry.className = "transcript-entry";
+  entry.className = `transcript-entry tone-${tone}`;
   entry.innerHTML =
     (speakerName
       ? `<div class="transcript-speaker speaker-${speaker}">${escapeHtml(speakerName)}</div>`
@@ -1172,6 +1362,26 @@ function appendTranscriptEvent(data) {
 
   scrollEl.appendChild(entry);
   scrollEl.scrollTop = scrollEl.scrollHeight;
+
+  // Update tone histogram for the speaking partner
+  if (speaker === "A" || speaker === "B") {
+    const tone = (emotion && emotion.tone) ? emotion.tone : "neutral";
+    state[speaker].tone_counts[tone] = (state[speaker].tone_counts[tone] || 0) + 1;
+    updateToneHistogram(speaker);
+  }
+}
+
+function updateToneHistogram(p) {
+  const counts = state[p].tone_counts;
+  const total = counts.aggressive + counts.neutral + counts.kind;
+  if (total === 0) return;
+  [["agg", "aggressive"], ["neu", "neutral"], ["kin", "kind"]].forEach(([key, tone]) => {
+    const pct = (counts[tone] / total) * 100;
+    const bar   = document.getElementById(`tone-bar-${key}-${p}`);
+    const count = document.getElementById(`tone-count-${key}-${p}`);
+    if (bar)   bar.style.width = `${pct}%`;
+    if (count) count.textContent = counts[tone];
+  });
 }
 
 async function downloadSession() {
@@ -1437,8 +1647,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
   // resize canvases on window resize
   window.addEventListener("resize", () => {
-    redrawActivationTrace("A");
-    redrawActivationTrace("B");
+    redrawSharedTrace();
     redrawDualTrace();
     redrawRecActivationTrace("A");
     redrawRecActivationTrace("B");

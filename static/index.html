@@ -37,11 +37,25 @@
 <!-- ── main content ─────────────────────────────────────────────────────── -->
 <main class="main-content" role="main">
 
-  <!-- partner panels -->
+  <!-- shared activation trace -->
+  <div class="shared-trace-panel">
+    <canvas class="shared-act-canvas" id="shared-act-trace"
+            aria-label="Activation index for both partners"></canvas>
+    <div class="calm-zone-rows">
+      <div class="calm-zone-row" id="calm-row-A" hidden>
+        <span id="calm-zone-A"></span> in calm zone
+      </div>
+      <div class="calm-zone-row" id="calm-row-B" hidden>
+        <span id="calm-zone-B"></span> in calm zone
+      </div>
+    </div>
+  </div>
+
+  <!-- partner metric cards -->
   <div class="partner-row">
 
     <!-- ── Partner A ──────────────────────────────────────────────────── -->
-    <section class="partner-panel" id="panel-A" aria-label="Partner A physiological state">
+    <section class="partner-card" id="panel-A" aria-label="Partner A physiological state">
       <div class="partner-header">
         <span class="partner-name a" id="name-A">Partner A</span>
         <span class="state-badge regulated" id="state-badge-A">regulated</span>
@@ -49,63 +63,69 @@
         <span class="battery-level" id="battery-A"></span>
         <span class="connect-time" id="connect-time-A"></span>
       </div>
-
-      <!-- state description — prominent headline -->
-      <p class="state-description" id="state-desc-A"></p>
-
-      <!-- hero HR — single value -->
-      <div class="hr-hero">
-        <span class="hr-value" id="hr-value-A">—</span>
-        <span class="hr-unit">bpm</span>
-      </div>
-      <div class="hr-delta" id="hr-delta-A">baseline not set</div>
-
-      <!-- activation score + time series -->
-      <div class="activation-row">
-        <span class="activation-score" id="act-score-A">—</span>
-        <span class="activation-unit">/ 100</span>
-        <span class="activation-direction" id="act-dir-A"></span>
-      </div>
-      <div class="calm-zone-row" id="calm-row-A" hidden>
-        <span id="calm-zone-A"></span> in calm zone
-      </div>
-      <canvas class="activation-canvas" id="act-trace-A"
-              aria-label="Activation score history for Partner A"></canvas>
-
-      <!-- metric tiles -->
       <div class="metric-tiles">
-
+        <!-- activation index — full width -->
+        <div class="metric-tile tile-activation-wide" id="tile-act-A">
+          <div class="tile-label">activation index</div>
+          <span class="tile-act-score" id="act-score-A">—</span>
+          <span class="tile-act-unit">/ 100</span>
+          <span class="tile-act-dir" id="act-dir-A"></span>
+        </div>
+        <!-- row 1 -->
+        <div class="metric-tile" id="tile-hr-A">
+          <div class="tile-label">bpm</div>
+          <div class="hr-value" id="hr-value-A">—</div>
+        </div>
         <div class="metric-tile" id="tile-rmssd-A">
           <div class="tile-label">HRV</div>
           <div class="tile-value" id="rmssd-val-A">—</div>
           <div class="tile-unit">ms</div>
         </div>
-
         <div class="metric-tile" id="tile-hf-A">
-          <div class="tile-label">vagal activity</div>
+          <div class="tile-label">vagal</div>
           <div class="tile-value" id="hf-val-A">—</div>
           <div class="tile-unit">a.u.</div>
         </div>
-
+        <!-- row 2 -->
+        <div class="metric-tile" id="tile-baseline-A">
+          <div class="tile-label">vs baseline</div>
+          <div class="hr-delta" id="hr-delta-A">—</div>
+        </div>
         <div class="metric-tile" id="tile-resp-A">
-          <div class="tile-label">respiration (derived)</div>
+          <div class="tile-label">resp.</div>
           <div class="tile-value" id="resp-val-A">—</div>
           <div class="tile-unit">br/min</div>
         </div>
-
         <div class="metric-tile" id="tile-coh-A">
-          <div class="tile-label">coherence</div>
+          <div class="tile-label">coh.</div>
           <div class="tile-value" id="coh-val-A">—</div>
           <div class="coherence-bar-wrap">
             <div class="coherence-bar-fill" id="coh-bar-A"></div>
           </div>
         </div>
-
       </div><!-- /metric-tiles -->
+      <div class="tone-histogram" id="tone-hist-A">
+        <div class="tone-bar-row">
+          <span class="tone-hist-label">aggressive</span>
+          <div class="tone-hist-bar-wrap"><div class="tone-hist-bar aggressive" id="tone-bar-agg-A"></div></div>
+          <span class="tone-hist-count" id="tone-count-agg-A">0</span>
+        </div>
+        <div class="tone-bar-row">
+          <span class="tone-hist-label">neutral</span>
+          <div class="tone-hist-bar-wrap"><div class="tone-hist-bar neutral" id="tone-bar-neu-A"></div></div>
+          <span class="tone-hist-count" id="tone-count-neu-A">0</span>
+        </div>
+        <div class="tone-bar-row">
+          <span class="tone-hist-label">kind</span>
+          <div class="tone-hist-bar-wrap"><div class="tone-hist-bar kind" id="tone-bar-kin-A"></div></div>
+          <span class="tone-hist-count" id="tone-count-kin-A">0</span>
+        </div>
+      </div>
+      <p class="state-description" id="state-desc-A"></p>
     </section>
 
     <!-- ── Partner B ──────────────────────────────────────────────────── -->
-    <section class="partner-panel" id="panel-B" aria-label="Partner B physiological state">
+    <section class="partner-card" id="panel-B" aria-label="Partner B physiological state">
       <div class="partner-header">
         <span class="partner-name b" id="name-B">Partner B</span>
         <span class="state-badge regulated" id="state-badge-B">regulated</span>
@@ -113,119 +133,106 @@
         <span class="battery-level" id="battery-B"></span>
         <span class="connect-time" id="connect-time-B"></span>
       </div>
-
-      <!-- state description — prominent headline -->
-      <p class="state-description" id="state-desc-B"></p>
-
-      <!-- hero HR — single value -->
-      <div class="hr-hero">
-        <span class="hr-value" id="hr-value-B">—</span>
-        <span class="hr-unit">bpm</span>
-      </div>
-      <div class="hr-delta" id="hr-delta-B">baseline not set</div>
-
-      <!-- activation score + time series -->
-      <div class="activation-row">
-        <span class="activation-score" id="act-score-B">—</span>
-        <span class="activation-unit">/ 100</span>
-        <span class="activation-direction" id="act-dir-B"></span>
-      </div>
-      <div class="calm-zone-row" id="calm-row-B" hidden>
-        <span id="calm-zone-B"></span> in calm zone
-      </div>
-      <canvas class="activation-canvas" id="act-trace-B"
-              aria-label="Activation score history for Partner B"></canvas>
-
-      <!-- metric tiles -->
       <div class="metric-tiles">
-
+        <!-- activation index — full width -->
+        <div class="metric-tile tile-activation-wide" id="tile-act-B">
+          <div class="tile-label">activation index</div>
+          <span class="tile-act-score" id="act-score-B">—</span>
+          <span class="tile-act-unit">/ 100</span>
+          <span class="tile-act-dir" id="act-dir-B"></span>
+        </div>
+        <!-- row 1 -->
+        <div class="metric-tile" id="tile-hr-B">
+          <div class="tile-label">bpm</div>
+          <div class="hr-value" id="hr-value-B">—</div>
+        </div>
         <div class="metric-tile" id="tile-rmssd-B">
           <div class="tile-label">HRV</div>
           <div class="tile-value" id="rmssd-val-B">—</div>
           <div class="tile-unit">ms</div>
         </div>
-
         <div class="metric-tile" id="tile-hf-B">
-          <div class="tile-label">vagal activity</div>
+          <div class="tile-label">vagal</div>
           <div class="tile-value" id="hf-val-B">—</div>
           <div class="tile-unit">a.u.</div>
         </div>
-
+        <!-- row 2 -->
+        <div class="metric-tile" id="tile-baseline-B">
+          <div class="tile-label">vs baseline</div>
+          <div class="hr-delta" id="hr-delta-B">—</div>
+        </div>
         <div class="metric-tile" id="tile-resp-B">
-          <div class="tile-label">respiration (derived)</div>
+          <div class="tile-label">resp.</div>
           <div class="tile-value" id="resp-val-B">—</div>
           <div class="tile-unit">br/min</div>
         </div>
-
         <div class="metric-tile" id="tile-coh-B">
-          <div class="tile-label">coherence</div>
+          <div class="tile-label">coh.</div>
           <div class="tile-value" id="coh-val-B">—</div>
           <div class="coherence-bar-wrap">
             <div class="coherence-bar-fill" id="coh-bar-B"></div>
           </div>
         </div>
-
       </div><!-- /metric-tiles -->
+      <div class="tone-histogram" id="tone-hist-B">
+        <div class="tone-bar-row">
+          <span class="tone-hist-label">aggressive</span>
+          <div class="tone-hist-bar-wrap"><div class="tone-hist-bar aggressive" id="tone-bar-agg-B"></div></div>
+          <span class="tone-hist-count" id="tone-count-agg-B">0</span>
+        </div>
+        <div class="tone-bar-row">
+          <span class="tone-hist-label">neutral</span>
+          <div class="tone-hist-bar-wrap"><div class="tone-hist-bar neutral" id="tone-bar-neu-B"></div></div>
+          <span class="tone-hist-count" id="tone-count-neu-B">0</span>
+        </div>
+        <div class="tone-bar-row">
+          <span class="tone-hist-label">kind</span>
+          <div class="tone-hist-bar-wrap"><div class="tone-hist-bar kind" id="tone-bar-kin-B"></div></div>
+          <span class="tone-hist-count" id="tone-count-kin-B">0</span>
+        </div>
+      </div>
+      <p class="state-description" id="state-desc-B"></p>
     </section>
 
   </div><!-- /partner-row -->
 
-  <!-- ── dyadic coupling panel ────────────────────────────────────────── -->
-  <section class="dyadic-panel" aria-label="Dyadic coupling — exploratory layer">
-    <div class="dyadic-header">
-      <span class="dyadic-title">dyadic coupling</span>
-      <span class="dyadic-tag">exploratory layer</span>
-    </div>
+  <!-- ── bottom row: dyadic coupling + session transcript ─────────────── -->
+  <div class="bottom-row">
 
-    <div class="dyadic-stats">
-      <div class="dyadic-stat">
-        <span class="dyadic-stat-label">peak r</span>
-        <span class="dyadic-stat-value" id="dyadic-r">—</span>
+    <section class="dyadic-panel" aria-label="Dyadic coupling — exploratory layer">
+      <div class="dyadic-header">
+        <span class="dyadic-title">dyadic coupling</span>
+        <span class="dyadic-tag">exploratory layer</span>
       </div>
-      <div class="dyadic-stat">
-        <span class="dyadic-stat-label">lag / leader</span>
-        <span class="dyadic-stat-value" id="dyadic-lag">—</span>
+
+      <div class="dyadic-summary" aria-live="polite">
+        <span class="dyadic-state-label" id="dyadic-state-label"></span>
+        <p class="dyadic-body" id="dyadic-body">Waiting for enough data — needs ~60 s of heart rate from both partners.</p>
       </div>
-      <div class="dyadic-stat">
-        <span class="dyadic-stat-label">phase</span>
-        <span class="dyadic-stat-value" id="dyadic-phase">—</span>
+    </section>
+
+    <section class="transcript-panel" id="transcript-panel" aria-label="Session transcript">
+      <div class="transcript-header">
+        <span class="transcript-title">session transcript</span>
+        <span class="transcript-status" id="transcript-mic-status">mic off</span>
+        <button class="btn" id="btn-download-session"
+                onclick="downloadSession()" hidden>↓ download log</button>
+        <div class="enroll-row" id="enroll-row">
+          <span class="enroll-label">voice enrollment:</span>
+          <button class="btn btn-enroll" id="enroll-btn-A" onclick="enrollVoice('A')">enroll <span id="enroll-name-A">Partner A</span></button>
+          <button class="btn btn-enroll" id="enroll-btn-B" onclick="enrollVoice('B')">enroll <span id="enroll-name-B">Partner B</span></button>
+          <button class="btn btn-enroll" id="enroll-btn-T" onclick="enrollVoice('T')">enroll <span id="enroll-name-T">Therapist</span></button>
+          <span class="enroll-hint">each person speaks alone for ~4 s</span>
+        </div>
       </div>
-    </div>
+      <p class="transcript-empty" id="transcript-empty">
+        Press <kbd>● record</kbd> to begin annotating the session.
+      </p>
+      <div class="transcript-scroll" id="transcript-scroll"
+           role="log" aria-live="polite" aria-relevant="additions"></div>
+    </section>
 
-    <p class="dyadic-interp" id="dyadic-interp"></p>
-
-    <canvas class="dual-trace-canvas" id="dual-trace"
-            aria-label="Dual HR trace for both partners"></canvas>
-
-    <p class="dyadic-caveat">
-      Synchrony should be read against arousal: high coupling while both partners are flooded
-      means "locked in conflict," not co-regulation. Compare against a surrogate baseline
-      (non-partner pairings) before calling a value meaningful. These are exploratory signals,
-      not relationship verdicts.
-    </p>
-  </section>
-
-  <!-- ── session transcript ────────────────────────────────────────────── -->
-  <section class="transcript-panel" id="transcript-panel" aria-label="Session transcript">
-    <div class="transcript-header">
-      <span class="transcript-title">session transcript</span>
-      <span class="transcript-status" id="transcript-mic-status">mic off</span>
-      <button class="btn" id="btn-download-session"
-              onclick="downloadSession()" hidden>↓ download log</button>
-      <div class="enroll-row" id="enroll-row">
-        <span class="enroll-label">voice enrollment:</span>
-        <button class="btn btn-enroll" id="enroll-btn-A" onclick="enrollVoice('A')">enroll <span id="enroll-name-A">Partner A</span></button>
-        <button class="btn btn-enroll" id="enroll-btn-B" onclick="enrollVoice('B')">enroll <span id="enroll-name-B">Partner B</span></button>
-        <button class="btn btn-enroll" id="enroll-btn-T" onclick="enrollVoice('T')">enroll <span id="enroll-name-T">Therapist</span></button>
-        <span class="enroll-hint">each person speaks alone for ~4 s</span>
-      </div>
-    </div>
-    <p class="transcript-empty" id="transcript-empty">
-      Press <kbd>● record</kbd> to begin annotating the session.
-    </p>
-    <div class="transcript-scroll" id="transcript-scroll"
-         role="log" aria-live="polite" aria-relevant="additions"></div>
-  </section>
+  </div><!-- /bottom-row -->
 
 </main>
 

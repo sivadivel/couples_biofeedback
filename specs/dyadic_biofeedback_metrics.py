@@ -375,6 +375,7 @@ def windowed_lagged_xcorr(a, b, fs, max_lag_s=4.0, detrend=True):
     b = (b - b.mean()) / (b.std() + 1e-12)
     max_lag = int(max_lag_s * fs)
     best_r, best_lag = 0.0, 0
+    r_list = []
     for lag in range(-max_lag, max_lag + 1):
         if lag < 0:
             r = np.corrcoef(a[:lag], b[-lag:])[0, 1]
@@ -382,9 +383,11 @@ def windowed_lagged_xcorr(a, b, fs, max_lag_s=4.0, detrend=True):
             r = np.corrcoef(a[lag:], b[:-lag])[0, 1]
         else:
             r = np.corrcoef(a, b)[0, 1]
+        r_list.append(float(r) if np.isfinite(r) else 0.0)
         if np.isfinite(r) and abs(r) > abs(best_r):
             best_r, best_lag = r, lag
-    return {"peak_r": float(best_r), "lag_s": best_lag / fs}
+    return {"peak_r": float(best_r), "lag_s": best_lag / fs,
+            "r_values": r_list, "lag_step_s": 1.0 / fs}
 
 
 def common_grid_hr(rr_ms, t_start, t_end, fs=4.0):

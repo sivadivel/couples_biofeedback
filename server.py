@@ -22,6 +22,44 @@ from emotion import classify_emotion
 
 STATIC_DIR = Path(__file__).parent / "static"
 
+_REPORT_SYSTEM = """\
+You are a clinical supervisor writing a post-session summary for a couples therapist.
+You have access to a session transcript annotated with real-time physiological data
+from both partners (activation index, HRV, vagal tone, coherence, respiration) and
+emotion tone labels (aggressive / neutral / kind) for each utterance.
+
+Write a concise, plain-English clinical summary in four sections:
+
+SESSION ARC
+One or two sentences describing the overall trajectory — how the session opened,
+whether it escalated or de-escalated, and how it ended physiologically.
+
+KEY MOMENTS
+Three to five specific moments worth examining. For each, include the approximate
+timestamp, paraphrase or quote the utterance, and explain what the physiological
+data shows (e.g. "Alex's activation spiked from 38 to 71 within the response window,
+while Jordan's HRV dropped — both partners were dysregulated simultaneously").
+Prioritize moments where: activation crossed 65 (flooding), one partner's physiology
+responded measurably to the other's speech, or a repair attempt correlated with
+a drop in activation.
+
+DYADIC PATTERN
+Describe the co-regulation dynamic this session: who tends to escalate first,
+who follows, whether there were periods of mutual synchrony, and whether any
+repair attempts landed physiologically.
+
+FOR NEXT SESSION
+Two or three concrete clinical observations or questions to carry forward, grounded
+in what the data showed (not generic advice).
+
+Rules:
+- Be specific. Cite timestamps and numbers from the data.
+- Do not speculate beyond what the data shows.
+- Write in clear language a therapist can read in under two minutes.
+- Do not use markdown formatting symbols (no ##, **, *, -). Use plain text.
+- Use blank lines between sections.
+"""
+
 _METRIC_GUIDE = """
 COUPLES BIOFEEDBACK SESSION — METRIC GUIDE FOR AI ANALYSIS
 ===========================================================
@@ -772,6 +810,80 @@ class BiofeedbackServer:
         })
         return web.Response(content_type="application/json", text=json.dumps({"ok": True}))
 
+    # ── AI report ─────────────────────────────────────────────────────────────
+
+    async def report_handler(self, request: web.Request) -> web.StreamResponse | web.Response:
+        if self._session_file is None or self._session_id is None:
+            return web.Response(status=404, text="No session log yet.")
+        path = Path(__file__).parent / "sessions" / f"{self._session_id}.ndjson"
+        if not path.exists():
+            return web.Response(status=404, text="Session file not found.")
+
+        api_key = os.environ.get("ANTHROPIC_API_KEY")
+        if not api_key:
+            return web.Response(status=503, text="ANTHROPIC_API_KEY not set.")
+
+        header_obj: dict | None = None
+        events: list[dict] = []
+        patches: dict[int, dict] = {}
+        with open(path) as f:
+            for line in f:
+                line = line.strip()
+                if not line:
+                    continue
+                try:
+                    obj = json.loads(line)
+                except json.JSONDecodeError:
+                    continue
+                t = obj.get("type")
+                if t == "header":
+                    header_obj = obj
+                elif t == "event":
+                    events.append(obj)
+                elif t == "response_patch":
+                    patches[obj["seq"]] = obj.get("response_metrics", {})
+
+        if not events:
+            return web.Response(status=400, text="No transcript events recorded yet.")
+
+        for ev in events:
+            if ev["seq"] in patches:
+                ev["response_metrics"] = patches[ev["seq"]]
+
+        session_doc = {
+            "names": header_obj.get("names", {}) if header_obj else {},
+            "metric_guide": _METRIC_GUIDE,
+            "events": events,
+        }
+
+        from anthropic import AsyncAnthropic
+        client = AsyncAnthropic(api_key=api_key)
+
+        stream_resp = web.StreamResponse(headers={
+            "Content-Type": "text/plain; charset=utf-8",
+            **self._NO_CACHE,
+        })
+        await stream_resp.prepare(request)
+
+        try:
+            async with client.messages.stream(
+                model="claude-sonnet-4-6",
+                max_tokens=1500,
+                system=_REPORT_SYSTEM,
+                messages=[{
+                    "role": "user",
+                    "content": f"Session data:\n\n{json.dumps(session_doc, indent=2)}",
+                }],
+            ) as stream:
+                async for chunk in stream.text_stream:
+                    await stream_resp.write(chunk.encode())
+        except Exception as exc:
+            print(f"[report] ERROR: {exc}")
+            await stream_resp.write(f"\n\n[Error generating report: {exc}]".encode())
+
+        await stream_resp.write_eof()
+        return stream_resp
+
     # ── app factory ──────────────────────────────────────────────────────────
 
     def build_app(self) -> web.Application:
@@ -784,6 +896,7 @@ class BiofeedbackServer:
         app.router.add_post("/api/transcribe", self.transcribe_handler)
         app.router.add_post("/api/enroll/{partner}", self.enroll_handler)
         app.router.add_get("/api/session_download", self.session_download_handler)
+        app.router.add_get("/api/report", self.report_handler)
         app.router.add_get("/api/state", self.state_handler)
         app.router.add_get("/api/scan", self.scan_handler)
         app.router.add_post("/api/configure", self.configure_handler)

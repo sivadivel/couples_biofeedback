@@ -111,11 +111,6 @@
           <span class="tone-hist-count" id="tone-count-agg-A">0</span>
         </div>
         <div class="tone-bar-row">
-          <span class="tone-hist-label">neutral</span>
-          <div class="tone-hist-bar-wrap"><div class="tone-hist-bar neutral" id="tone-bar-neu-A"></div></div>
-          <span class="tone-hist-count" id="tone-count-neu-A">0</span>
-        </div>
-        <div class="tone-bar-row">
           <span class="tone-hist-label">kind</span>
           <div class="tone-hist-bar-wrap"><div class="tone-hist-bar kind" id="tone-bar-kin-A"></div></div>
           <span class="tone-hist-count" id="tone-count-kin-A">0</span>
@@ -181,11 +176,6 @@
           <span class="tone-hist-count" id="tone-count-agg-B">0</span>
         </div>
         <div class="tone-bar-row">
-          <span class="tone-hist-label">neutral</span>
-          <div class="tone-hist-bar-wrap"><div class="tone-hist-bar neutral" id="tone-bar-neu-B"></div></div>
-          <span class="tone-hist-count" id="tone-count-neu-B">0</span>
-        </div>
-        <div class="tone-bar-row">
           <span class="tone-hist-label">kind</span>
           <div class="tone-hist-bar-wrap"><div class="tone-hist-bar kind" id="tone-bar-kin-B"></div></div>
           <span class="tone-hist-count" id="tone-count-kin-B">0</span>
@@ -217,6 +207,8 @@
         <span class="transcript-status" id="transcript-mic-status">mic off</span>
         <button class="btn" id="btn-download-session"
                 onclick="downloadSession()" hidden>↓ download log</button>
+        <button class="btn btn-report" id="btn-report"
+                onclick="generateReport()" hidden>AI report</button>
         <div class="enroll-row" id="enroll-row">
           <span class="enroll-label">voice enrollment:</span>
           <button class="btn btn-enroll" id="enroll-btn-A" onclick="enrollVoice('A')">enroll <span id="enroll-name-A">Partner A</span></button>
@@ -242,6 +234,19 @@
   <span class="kbd-hints">b set baseline · r recovery mode · d dark mode · m mic</span>
   <span class="kbd-hints"><a href="/whitepaper" target="_blank" style="color:inherit;">technical whitepaper ↗</a></span>
 </footer>
+
+<!-- ── AI report modal ──────────────────────────────────────────────────── -->
+<div id="report-modal" class="report-modal" hidden role="dialog" aria-modal="true" aria-label="AI session report">
+  <div class="report-card">
+    <div class="report-header">
+      <span class="report-title">session report</span>
+      <button class="btn report-close-btn" onclick="closeReport()">✕</button>
+    </div>
+    <div class="report-body" id="report-body">
+      <pre class="report-text" id="report-text"></pre>
+    </div>
+  </div>
+</div>
 
 <!-- ── setup overlay ────────────────────────────────────────────────────── -->
 <div id="setup-overlay" class="setup-overlay" hidden>

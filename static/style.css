@@ -1130,6 +1130,82 @@ body.mode-b {
   color: var(--danger);
 }
 
+/* ── AI report button ───────────────────────────────────────────────── */
+.btn-report {
+  background: var(--surface);
+  border-color: var(--border);
+  color: var(--text);
+}
+.btn-report:hover {
+  border-color: var(--text-secondary);
+}
+.btn-report:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+/* ── AI report modal ────────────────────────────────────────────────── */
+.report-modal {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.45);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 300;
+  padding: 24px;
+}
+.report-modal[hidden] { display: none; }
+
+.report-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  width: 100%;
+  max-width: 680px;
+  max-height: 80vh;
+  display: flex;
+  flex-direction: column;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.18);
+}
+
+.report-header {
+  display: flex;
+  align-items: center;
+  padding: 14px 18px;
+  border-bottom: 1px solid var(--border);
+  gap: 12px;
+}
+
+.report-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text);
+  flex: 1;
+}
+
+.report-close-btn {
+  padding: 2px 8px;
+  font-size: 12px;
+  line-height: 1;
+}
+
+.report-body {
+  flex: 1;
+  overflow-y: auto;
+  padding: 18px;
+}
+
+.report-text {
+  font-family: var(--font);
+  font-size: 13px;
+  line-height: 1.7;
+  color: var(--text);
+  white-space: pre-wrap;
+  word-break: break-word;
+  margin: 0;
+}
+
 /* ── reduced motion ──────────────────────────────────────────────────── */
 @media (prefers-reduced-motion: reduce) {
   .breath-circle { transform: scale(0.78); opacity: 0.9; }

@@ -1314,6 +1314,8 @@ function appendTranscriptEvent(data) {
 
   if (emptyEl)    emptyEl.hidden = true;
   if (downloadBtn) downloadBtn.hidden = false;
+  const reportBtn = document.getElementById("btn-report");
+  if (reportBtn) reportBtn.hidden = false;
 
   const elapsed = data.session_elapsed_s ?? 0;
   const m  = String(Math.floor(elapsed / 60)).padStart(2, "0");
@@ -1373,9 +1375,9 @@ function appendTranscriptEvent(data) {
 
 function updateToneHistogram(p) {
   const counts = state[p].tone_counts;
-  const total = counts.aggressive + counts.neutral + counts.kind;
+  const total = counts.aggressive + counts.kind;
   if (total === 0) return;
-  [["agg", "aggressive"], ["neu", "neutral"], ["kin", "kind"]].forEach(([key, tone]) => {
+  [["agg", "aggressive"], ["kin", "kind"]].forEach(([key, tone]) => {
     const pct = (counts[tone] / total) * 100;
     const bar   = document.getElementById(`tone-bar-${key}-${p}`);
     const count = document.getElementById(`tone-count-${key}-${p}`);
@@ -1401,6 +1403,44 @@ async function downloadSession() {
   } catch (err) {
     console.error("[download]", err);
   }
+}
+
+// ── AI report ─────────────────────────────────────────────────────────────────
+
+async function generateReport() {
+  const modal   = document.getElementById("report-modal");
+  const textEl  = document.getElementById("report-text");
+  const btn     = document.getElementById("btn-report");
+
+  modal.hidden  = false;
+  textEl.textContent = "";
+  if (btn) { btn.disabled = true; btn.textContent = "generating…"; }
+
+  try {
+    const res = await fetch("/api/report");
+    if (!res.ok) {
+      textEl.textContent = "Error: " + (await res.text());
+      return;
+    }
+    const reader  = res.body.getReader();
+    const decoder = new TextDecoder();
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      textEl.textContent += decoder.decode(value, { stream: true });
+      textEl.scrollTop = textEl.scrollHeight;
+    }
+  } catch (err) {
+    textEl.textContent = "Error: " + err.message;
+    console.error("[report]", err);
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = "AI report"; }
+  }
+}
+
+function closeReport() {
+  const modal = document.getElementById("report-modal");
+  if (modal) modal.hidden = true;
 }
 
 // ── dark mode ─────────────────────────────────────────────────────────────────

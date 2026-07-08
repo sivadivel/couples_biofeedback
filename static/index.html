@@ -25,6 +25,18 @@
   <button class="btn btn-mic" id="btn-mic" onclick="toggleRecording()">● record</button>
   <span class="rec-status" id="rec-status" aria-live="polite" hidden></span>
   <a href="/mode_b" class="btn btn-calm">recovery mode →</a>
+  <a href="/meditate" class="btn">meditate →</a>
+  <div class="scenario-live-control" id="scenario-live-control" hidden>
+    <label for="live-scenario" class="scenario-live-label">scenario</label>
+    <select id="live-scenario" onchange="setLiveScenario()">
+      <option value="low_low">low activation · low coupling</option>
+      <option value="low_high">low activation · high coupling</option>
+      <option value="high_low">high activation · low coupling</option>
+      <option value="high_high">high activation · high coupling</option>
+      <option value="mixed_low">mixed activation · low coupling</option>
+      <option value="mixed_high">mixed activation · high coupling</option>
+    </select>
+  </div>
   <button class="btn btn-theme" id="btn-theme" onclick="toggleDarkMode()" title="toggle dark mode">◐</button>
 </header>
 
@@ -50,6 +62,35 @@
       </div>
     </div>
   </div>
+
+  <!-- dyadic coupling: trace + phase ribbon + legend + text summary -->
+  <section class="dyadic-panel" aria-label="Dyadic coupling — exploratory layer">
+    <div class="dyadic-header">
+      <span class="dyadic-title">dyadic coupling</span>
+      <span class="dyadic-tag">exploratory layer</span>
+    </div>
+
+    <div class="dyadic-trace-wrap">
+      <canvas class="dyadic-trace-canvas" id="dyadic-trace"
+              aria-label="Who is leading and by how much, over the last 10 minutes"></canvas>
+      <canvas class="dyadic-phase-canvas" id="dyadic-phase-ribbon"
+              aria-label="In-phase vs anti-phase coupling over time"></canvas>
+      <div class="dyadic-tooltip" id="dyadic-tooltip" hidden></div>
+    </div>
+
+    <div class="dyadic-legend">
+      <span class="legend-swatch legend-a"></span><span id="legend-name-a">Partner A</span> leads
+      <span class="legend-swatch legend-b"></span><span id="legend-name-b">Partner B</span> leads
+      <span class="legend-note">opacity = coupling strength (above chance only)</span>
+      <span class="legend-dot legend-inphase"></span>in-phase
+      <span class="legend-dot legend-antiphase"></span>anti-phase
+    </div>
+
+    <div class="dyadic-summary" aria-live="polite">
+      <span class="dyadic-state-label" id="dyadic-state-label"></span>
+      <p class="dyadic-body" id="dyadic-body">Waiting for enough data — needs ~60 s of heart rate from both partners.</p>
+    </div>
+  </section>
 
   <!-- partner metric cards -->
   <div class="partner-row">
@@ -186,20 +227,8 @@
 
   </div><!-- /partner-row -->
 
-  <!-- ── bottom row: dyadic coupling + session transcript ─────────────── -->
+  <!-- ── bottom row: session transcript ────────────────────────────────── -->
   <div class="bottom-row">
-
-    <section class="dyadic-panel" aria-label="Dyadic coupling — exploratory layer">
-      <div class="dyadic-header">
-        <span class="dyadic-title">dyadic coupling</span>
-        <span class="dyadic-tag">exploratory layer</span>
-      </div>
-
-      <div class="dyadic-summary" aria-live="polite">
-        <span class="dyadic-state-label" id="dyadic-state-label"></span>
-        <p class="dyadic-body" id="dyadic-body">Waiting for enough data — needs ~60 s of heart rate from both partners.</p>
-      </div>
-    </section>
 
     <section class="transcript-panel" id="transcript-panel" aria-label="Session transcript">
       <div class="transcript-header">
@@ -261,20 +290,30 @@
 
       <div class="setup-partner">
         <span class="setup-partner-label a">Partner A</span>
+        <div class="setup-partner-row">
+          <select class="setup-device-select" id="setup-user-A" onchange="onUserSelectChange('A')">
+            <option value="">— select or add user —</option>
+          </select>
+          <select class="setup-device-select" id="setup-device-A">
+            <option value="">— scan first —</option>
+          </select>
+        </div>
         <input type="text" class="setup-name-input" id="setup-name-A"
-               placeholder="Name" value="Partner A" />
-        <select class="setup-device-select" id="setup-device-A">
-          <option value="">— scan first —</option>
-        </select>
+               placeholder="New user name" hidden />
       </div>
 
       <div class="setup-partner">
         <span class="setup-partner-label b">Partner B</span>
+        <div class="setup-partner-row">
+          <select class="setup-device-select" id="setup-user-B" onchange="onUserSelectChange('B')">
+            <option value="">— none / select user —</option>
+          </select>
+          <select class="setup-device-select" id="setup-device-B">
+            <option value="">— none —</option>
+          </select>
+        </div>
         <input type="text" class="setup-name-input" id="setup-name-B"
-               placeholder="Name (optional)" value="Partner B" />
-        <select class="setup-device-select" id="setup-device-B">
-          <option value="">— none —</option>
-        </select>
+               placeholder="New user name (optional)" hidden />
       </div>
 
     </div>

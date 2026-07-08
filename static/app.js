@@ -66,6 +66,7 @@ const state = {
     leader: null,
     r_values: [],
     lag_step_s: 0.25,
+    trace: [],
   },
 };
 
@@ -81,6 +82,12 @@ function connectWS() {
 
   ws.onopen = () => {
     console.log("[ws] connected");
+    // Recovery screen uses the 3-signal (HR+RMSSD+vagal) activation index
+    // once a stationary window is available; everywhere else stays 2-signal
+    // (spec v2 §3.3). Reset to conversation mode when returning to "/".
+    const mode = document.body.classList.contains("mode-b") ? "recovery" : "conversation";
+    ws.send(JSON.stringify({ type: "set_mode", partner: "A", mode }));
+    ws.send(JSON.stringify({ type: "set_mode", partner: "B", mode }));  // no-op server-side if no partner B
   };
 
   ws.onmessage = (evt) => {
@@ -116,6 +123,7 @@ function handleMessage(data) {
       if (p) {
         state[p].mean_hr         = data.mean_hr;
         state[p].rmssd           = data.rmssd;
+        state[p].rmssd_status    = data.rmssd_status || "ok";
         state[p].flooded         = data.flooded;
         state[p].hr_baseline_pct = data.hr_baseline_pct;
         state[p].signalQuality   = data.signal_quality ?? null;
@@ -146,11 +154,15 @@ function handleMessage(data) {
     case "slow":
       if (p) {
         state[p].hf                = data.hf;
+        state[p].hf_status         = data.hf_status || "ok";
         state[p].coherence         = data.coherence;
+        state[p].coherence_status  = data.coherence_status || "ok";
         state[p].resp_rate         = data.resp_rate;
+        state[p].resp_rate_status  = data.resp_rate_status || "ok";
         state[p].activation        = data.activation;
         state[p].direction         = data.direction;
         state[p].confidence        = data.confidence;
+        state[p].signals_mixed     = data.signals_mixed;
         state[p].state_description = data.state_description;
         state[p].calm_zone_s       = data.calm_zone_s ?? 0;
         if (data.trace_activation) state[p].trace_activation = data.trace_activation;
@@ -163,13 +175,18 @@ function handleMessage(data) {
       break;
 
     case "dyadic":
-      state.dyadic.peak_r    = data.peak_r;
-      state.dyadic.lag_s     = data.lag_s;
-      state.dyadic.phase     = data.phase;
-      state.dyadic.leader    = data.leader;
-      state.dyadic.r_values  = data.r_values  ?? [];
-      state.dyadic.lag_step_s = data.lag_step_s ?? 0.25;
+      state.dyadic.peak_r       = data.peak_r;
+      state.dyadic.lag_s        = data.lag_s;
+      state.dyadic.phase        = data.phase;
+      state.dyadic.leader       = data.leader;
+      state.dyadic.r_values     = data.r_values  ?? [];
+      state.dyadic.lag_step_s   = data.lag_step_s ?? 0.25;
+      state.dyadic.p_value      = data.p_value;
+      state.dyadic.percentile   = data.percentile;
+      state.dyadic.above_chance = data.above_chance;
+      state.dyadic.trace        = data.trace ?? [];
       updateDyadicPanel();
+      redrawDyadicTrace();
       break;
 
     case "session_init":
@@ -192,6 +209,11 @@ function handleMessage(data) {
         const bCohRow = document.getElementById("breath-coh-row-B");
         if (bCohRow) bCohRow.style.display = "none";
       }
+      updateScenarioControl(data.simulated, data.scenario);
+      break;
+
+    case "scenario_state":
+      updateScenarioControl(true, data.scenario);
       break;
 
     case "baseline_status":
@@ -398,10 +420,24 @@ function updateHeroHR(p) {
   }
 }
 
+// Spec v2 §1: a gated tile shows WHY, not a stale/blank number.
+const GATING_LABELS = {
+  warming_up:    "warming up…",
+  paused_speech: "paused (speech)",
+  motion:        "paused (motion)",
+};
+
+function gatingLabel(status) {
+  return GATING_LABELS[status] || null;
+}
+
 function updateMidTiles(p) {
   const s = state[p];
   const rmssdEl = document.getElementById(`rmssd-val-${p}`);
-  if (rmssdEl) rmssdEl.textContent = s.rmssd !== null ? s.rmssd.toFixed(1) : "—";
+  if (rmssdEl) {
+    rmssdEl.textContent = s.rmssd !== null ? s.rmssd.toFixed(1) : (gatingLabel(s.rmssd_status) || "—");
+    rmssdEl.classList.toggle("tile-gated", s.rmssd === null && !!gatingLabel(s.rmssd_status));
+  }
 }
 
 function updateSlowTiles(p) {
@@ -411,25 +447,37 @@ function updateSlowTiles(p) {
   if (actEl) actEl.textContent = s.activation !== null ? Math.round(s.activation) : "—";
 
   const dirEl = document.getElementById(`act-dir-${p}`);
-  if (dirEl) dirEl.textContent = s.direction || "";
+  if (dirEl) dirEl.textContent = (s.direction || "") + (s.signals_mixed ? " (signals mixed)" : "");
 
   const descEl = document.getElementById(`state-desc-${p}`);
   if (descEl) descEl.textContent = s.state_description || "";
 
   const hfEl = document.getElementById(`hf-val-${p}`);
-  if (hfEl) hfEl.textContent = s.hf !== null ? Math.round(s.hf * 1e4) : "—";
+  if (hfEl) {
+    hfEl.textContent = s.hf !== null ? Math.round(s.hf * 1e4) : (gatingLabel(s.hf_status) || "—");
+    hfEl.classList.toggle("tile-gated", s.hf === null && !!gatingLabel(s.hf_status));
+  }
 
   const rrEl = document.getElementById(`resp-val-${p}`);
-  if (rrEl) rrEl.textContent = s.resp_rate !== null ? s.resp_rate.toFixed(1) : "—";
+  if (rrEl) {
+    rrEl.textContent = s.resp_rate !== null ? s.resp_rate.toFixed(1) : (gatingLabel(s.resp_rate_status) || "—");
+    rrEl.classList.toggle("tile-gated", s.resp_rate === null && !!gatingLabel(s.resp_rate_status));
+  }
 
   const cohEl = document.getElementById(`coh-val-${p}`);
   const cohBarEl = document.getElementById(`coh-bar-${p}`);
   if (s.coherence !== null) {
     const pct = Math.min(s.coherence / 3.0, 1.0) * 100;
-    if (cohEl)    cohEl.textContent = s.coherence.toFixed(2);
+    if (cohEl) {
+      cohEl.textContent = s.coherence.toFixed(2);
+      cohEl.classList.remove("tile-gated");
+    }
     if (cohBarEl) cohBarEl.style.width = pct.toFixed(1) + "%";
   } else {
-    if (cohEl)    cohEl.textContent = "—";
+    if (cohEl) {
+      cohEl.textContent = gatingLabel(s.coherence_status) || "—";
+      cohEl.classList.toggle("tile-gated", !!gatingLabel(s.coherence_status));
+    }
     if (cohBarEl) cohBarEl.style.width = "0%";
   }
 }
@@ -485,41 +533,46 @@ function updateDyadicPanel() {
   const r = d.peak_r;
   if (r === null) return;
 
-  const bothFlooded = state.A.flooded && state.B.flooded;
-  const anyFlooded  = state.A.flooded || state.B.flooded;
+  // Spec v2 §7.3: only surface a relational-dynamics claim when coupling is
+  // above chance (surrogate null test, not a bare r threshold), and even then
+  // gate the interpretation by both partners' arousal state.
+  const bothCalm     = state.A.activation !== null && state.B.activation !== null &&
+                       state.A.activation < 35 && state.B.activation < 35;
+  const bothActivated = state.A.activation !== null && state.B.activation !== null &&
+                        state.A.activation >= 65 && state.B.activation >= 65;
   const A = state.A.name || "Partner A";
   const B = state.B.name || "Partner B";
   const leader   = d.leader;
   const follower = leader === A ? B : leader === B ? A : null;
   const lagText  = Math.abs(d.lag_s ?? 0).toFixed(1);
   const inPhase  = d.phase === "in-phase";
+  const chanceText = d.above_chance
+    ? `above chance (p=${d.p_value != null ? d.p_value.toFixed(3) : "?"})`
+    : "at chance";
 
   let label, mod, body;
 
-  if (r >= 0.4 && bothFlooded) {
-    label = "co-escalation";
+  if (!d.above_chance) {
+    label = "at chance";
+    mod   = "neutral";
+    body  = `r=${r.toFixed(2)}, ${chanceText} against a shuffled-surrogate baseline — parallel, not linked. Not enough evidence of real synchrony this window to interpret further.`;
+  } else if (bothActivated) {
+    label = "conflict amplification";
     mod   = "danger";
-    body  = `${A} and ${B} are physiologically locked — high synchrony while both activated usually reflects co-escalation, not settling.`;
-  } else if (r >= 0.4 && inPhase && follower) {
-    label = "co-regulation signal";
+    body  = `${A} and ${B} are coupled ${chanceText} while both activated — physiologically locked, which usually reflects co-escalation, not settling.`;
+  } else if (bothCalm) {
+    label = "co-regulation";
     mod   = "calm";
-    body  = `${leader} is pacing the room — ${follower}'s body is following about ${lagText} seconds behind, both moving in the same direction.`;
-  } else if (r >= 0.4 && inPhase) {
-    label = "co-regulation signal";
-    mod   = "calm";
-    body  = `Both nervous systems are moving in close sync with no clear leader — mutual physiological attunement.`;
-  } else if (r >= 0.4 && !inPhase) {
-    label = "anti-phase coupling";
+    body  = `${A} and ${B} are coupled ${chanceText} while both calm` +
+            (follower ? ` — ${leader} leads by about ${lagText}s, ${follower} follows.` : `.`);
+  } else if (inPhase && follower) {
+    label = "coupling signal";
     mod   = "warning";
-    body  = `${A} and ${B} are moving in opposite directions — one activating as the other settles, about ${lagText} seconds apart.`;
-  } else if (r >= 0.2) {
-    label = "loose coupling";
-    mod   = "neutral";
-    body  = `Physiologies are loosely linked this window — some coordination, but the connection is weak.`;
+    body  = `Coupling is ${chanceText} — ${leader} is pacing, ${follower}'s body follows about ${lagText}s behind, but arousal states differ, so this isn't clearly co-regulation or conflict.`;
   } else {
-    label = "decoupled";
-    mod   = "neutral";
-    body  = `Nervous systems are moving independently — no meaningful synchrony detected this window.`;
+    label = inPhase ? "coupling signal" : "anti-phase coupling";
+    mod   = "warning";
+    body  = `Coupling is ${chanceText}, ${d.phase || "unclear phase"} — interpret cautiously since the two partners' arousal states differ.`;
   }
 
   labelEl.textContent = label;
@@ -569,9 +622,9 @@ function drawActivationTrace(canvas, values) {
 
   if (!values || values.length < 2) return;
 
-  // Fixed window: 18 points ≈ 3 min at 10 s/slow cycle.
+  // Fixed window: 60 points ≈ 10 min at 10 s/slow cycle.
   // Points anchor left; trace grows rightward as data accumulates.
-  const MAX_POINTS = 18;
+  const MAX_POINTS = 60;
   const toX = (i) => (i / (MAX_POINTS - 1)) * W;
 
   ctx.beginPath();
@@ -592,10 +645,9 @@ function drawActivationTrace(canvas, values) {
 
   // x-axis time labels
   const xLabels = [
-    { label: "−3m", x: toX(0),              align: "left"   },
-    { label: "−2m", x: toX(6),              align: "center" },
-    { label: "−1m", x: toX(12),             align: "center" },
-    { label: "now",      x: toX(MAX_POINTS - 1), align: "right"  },
+    { label: "−10m", x: toX(0),                     align: "left"   },
+    { label: "−5m",  x: toX((MAX_POINTS - 1) / 2),  align: "center" },
+    { label: "now",  x: toX(MAX_POINTS - 1),        align: "right"  },
   ];
   ctx.font = "10px sans-serif";
   ctx.fillStyle = "rgba(0,0,0,0.4)";
@@ -634,7 +686,7 @@ function drawSharedActivationTrace(canvas, valsA, valsB, nameA, nameB, dirA, dir
   });
   ctx.setLineDash([]);
 
-  const MAX_POINTS = 18;
+  const MAX_POINTS = 60; // 10 min at 10 s/slow cycle
   const toX = (i) => (i / (MAX_POINTS - 1)) * chartW;
 
   const drawTrace = (vals, color) => {
@@ -686,8 +738,9 @@ function drawSharedActivationTrace(canvas, valsA, valsB, nameA, nameB, dirA, dir
 
   // time axis
   ctx.font = "10px sans-serif"; ctx.fillStyle = "rgba(0,0,0,0.4)"; ctx.textBaseline = "top";
-  [{ t: "−3m", i: 0, a: "left" }, { t: "−2m", i: 6, a: "center" },
-   { t: "−1m", i: 12, a: "center" }, { t: "now", i: MAX_POINTS - 1, a: "right" }]
+  [{ t: "−10m", i: 0, a: "left" },
+   { t: "−5m",  i: (MAX_POINTS - 1) / 2, a: "center" },
+   { t: "now",  i: MAX_POINTS - 1, a: "right" }]
     .forEach(({ t, i, a }) => { ctx.textAlign = a; ctx.fillText(t, toX(i), chartH + 3); });
 }
 
@@ -704,6 +757,174 @@ function redrawActivationTrace(_p) {
   redrawSharedTrace();
 }
 
+// ── Dyadic coupling trace (diverging bar chart + phase ribbon) ────────────────
+
+const DYADIC_MAX_POINTS = 40; // 10 min at 15 s/dyadic cadence
+const DYADIC_MAX_LAG_S = 4.0;
+
+function opacityFor(peakR, aboveChance) {
+  const isDark = document.documentElement.getAttribute("data-theme") === "dark";
+  if (!aboveChance) return isDark ? 0.3 : 0.12;
+  return Math.min(1.0, Math.max(0.25, 0.25 + 0.75 * Math.abs(peakR)));
+}
+
+function drawDivergingBar(ctx, x, w, yZero, yEnd, color) {
+  const top = Math.min(yZero, yEnd);
+  const bottom = Math.max(yZero, yEnd);
+  const h = Math.max(0, bottom - top);
+  const r = Math.min(3, h, w / 2);
+  ctx.beginPath();
+  if (yEnd < yZero) {
+    // grows upward: rounded data-end at top, square at the zero baseline
+    ctx.moveTo(x, bottom);
+    ctx.lineTo(x, top + r);
+    ctx.arcTo(x, top, x + r, top, r);
+    ctx.lineTo(x + w - r, top);
+    ctx.arcTo(x + w, top, x + w, top + r, r);
+    ctx.lineTo(x + w, bottom);
+  } else {
+    // grows downward: rounded data-end at bottom, square at the zero baseline
+    ctx.moveTo(x, top);
+    ctx.lineTo(x, bottom - r);
+    ctx.arcTo(x, bottom, x + r, bottom, r);
+    ctx.lineTo(x + w - r, bottom);
+    ctx.arcTo(x + w, bottom, x + w, bottom - r, r);
+    ctx.lineTo(x + w, top);
+  }
+  ctx.closePath();
+  ctx.fillStyle = color;
+  ctx.fill();
+}
+
+function drawDyadicTrace(canvas, trace, nameA, nameB) {
+  if (!canvas) return;
+  const dpr = window.devicePixelRatio || 1;
+  const W = canvas.clientWidth, H = canvas.clientHeight;
+  if (W === 0 || H === 0) return;
+  if (canvas.width !== W * dpr || canvas.height !== H * dpr) {
+    canvas.width = W * dpr; canvas.height = H * dpr;
+  }
+  const ctx = canvas.getContext("2d");
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  ctx.clearRect(0, 0, W, H);
+
+  const BOTTOM_PAD = 14;
+  const chartH = H - BOTTOM_PAD;
+  const midY = chartH / 2;
+  const toY = (lag) => midY - (Math.max(-DYADIC_MAX_LAG_S, Math.min(DYADIC_MAX_LAG_S, lag)) / DYADIC_MAX_LAG_S) * midY;
+
+  // zero (tied) baseline
+  ctx.strokeStyle = "rgba(0,0,0,0.15)";
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  ctx.moveTo(0, midY); ctx.lineTo(W, midY);
+  ctx.stroke();
+
+  canvas._dyadicBars = [];
+
+  if (trace && trace.length > 0) {
+    const toX = (i) => (i / DYADIC_MAX_POINTS) * W;
+    const barW = Math.min(24, Math.max(2, (W / DYADIC_MAX_POINTS) * 0.6));
+    const bars = [];
+
+    trace.forEach((tick, i) => {
+      const x = toX(i);
+      const lag = tick.lag_s || 0;
+      const yZero = toY(0), yEnd = toY(lag);
+
+      let color;
+      if (tick.leader === nameA) color = "192,57,43";        // --partner-a
+      else if (tick.leader === nameB) color = "26,107,170";  // --partner-b
+      else color = "127,140,141";                             // tied — neutral gray
+
+      ctx.globalAlpha = opacityFor(tick.peak_r, tick.above_chance);
+      drawDivergingBar(ctx, x, barW, yZero, yEnd, `rgb(${color})`);
+      ctx.globalAlpha = 1.0;
+
+      bars.push({ x, w: barW, tick });
+    });
+
+    canvas._dyadicBars = bars;
+  }
+
+  // x-axis time labels
+  ctx.font = "10px sans-serif";
+  ctx.fillStyle = "rgba(0,0,0,0.4)";
+  ctx.textBaseline = "top";
+  [{ label: "−10m", x: 0,     align: "left"   },
+   { label: "−5m",  x: W / 2, align: "center" },
+   { label: "now",  x: W,     align: "right"  }]
+    .forEach(({ label, x, align }) => { ctx.textAlign = align; ctx.fillText(label, x, chartH + 2); });
+}
+
+function drawPhaseRibbon(canvas, trace) {
+  if (!canvas) return;
+  const dpr = window.devicePixelRatio || 1;
+  const W = canvas.clientWidth, H = canvas.clientHeight;
+  if (W === 0 || H === 0) return;
+  if (canvas.width !== W * dpr || canvas.height !== H * dpr) {
+    canvas.width = W * dpr; canvas.height = H * dpr;
+  }
+  const ctx = canvas.getContext("2d");
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  ctx.clearRect(0, 0, W, H);
+  if (!trace || trace.length === 0) return;
+
+  const toX = (i) => (i / DYADIC_MAX_POINTS) * W;
+  const barW = Math.min(24, Math.max(2, (W / DYADIC_MAX_POINTS) * 0.6));
+  const cy = H / 2;
+  const r = Math.max(1, Math.min(3, H / 2 - 1));
+  const isDark = document.documentElement.getAttribute("data-theme") === "dark";
+
+  trace.forEach((tick, i) => {
+    const x = toX(i) + barW / 2;
+    const color = tick.phase === "in-phase" ? "22,160,133" : "230,126,34"; // --calm / anti-phase amber
+    ctx.globalAlpha = tick.above_chance ? 0.9 : (isDark ? 0.4 : 0.25);
+    ctx.beginPath();
+    ctx.arc(x, cy, r, 0, Math.PI * 2);
+    ctx.fillStyle = `rgb(${color})`;
+    ctx.fill();
+    ctx.globalAlpha = 1.0;
+  });
+}
+
+function redrawDyadicTrace() {
+  drawDyadicTrace(
+    document.getElementById("dyadic-trace"),
+    state.dyadic.trace, state.A.name, state.B.name
+  );
+  drawPhaseRibbon(
+    document.getElementById("dyadic-phase-ribbon"),
+    state.dyadic.trace
+  );
+}
+
+function setupDyadicTooltip() {
+  const canvas = document.getElementById("dyadic-trace");
+  const tooltip = document.getElementById("dyadic-tooltip");
+  if (!canvas || !tooltip) return;
+
+  canvas.addEventListener("mousemove", (e) => {
+    const bars = canvas._dyadicBars || [];
+    if (bars.length === 0) { tooltip.hidden = true; return; }
+    const rect = canvas.getBoundingClientRect();
+    const mx = e.clientX - rect.left;
+    const my = e.clientY - rect.top;
+    const hit = bars.find(b => mx >= b.x && mx <= b.x + b.w);
+    if (!hit) { tooltip.hidden = true; return; }
+
+    const t = hit.tick;
+    const leaderText = t.leader === "tied" ? "tied" : `${t.leader} leads by ${Math.abs(t.lag_s).toFixed(1)}s`;
+    const sig = t.above_chance ? "above chance" : "at chance";
+    tooltip.textContent = `${leaderText} · r=${t.peak_r.toFixed(2)}, ${sig} · ${t.phase}`;
+    tooltip.hidden = false;
+    tooltip.style.left = `${mx + 10}px`;
+    tooltip.style.top = `${Math.max(0, my - 24)}px`;
+  });
+
+  canvas.addEventListener("mouseleave", () => { tooltip.hidden = true; });
+}
+
 function applyPartnerNames() {
   const nameA     = document.getElementById("name-A");
   const nameB     = document.getElementById("name-B");
@@ -711,12 +932,16 @@ function applyPartnerNames() {
   const labelB    = document.getElementById("label-b");
   const labelACoh = document.getElementById("label-a-coh");
   const labelBCoh = document.getElementById("label-b-coh");
+  const legendA   = document.getElementById("legend-name-a");
+  const legendB   = document.getElementById("legend-name-b");
   if (nameA)     nameA.textContent     = state.A.name;
   if (nameB)     nameB.textContent     = state.B.name;
   if (labelA)    labelA.textContent    = state.A.name;
   if (labelB)    labelB.textContent    = state.B.name;
   if (labelACoh) labelACoh.textContent = state.A.name;
   if (labelBCoh) labelBCoh.textContent = state.B.name;
+  if (legendA)   legendA.textContent   = state.A.name;
+  if (legendB)   legendB.textContent   = state.B.name;
   // sync enrollment button labels and _speakerNames lookup
   _speakerNames.A = state.A.name;
   _speakerNames.B = state.B.name;
@@ -724,6 +949,22 @@ function applyPartnerNames() {
   const enrollB = document.getElementById("enroll-name-B");
   if (enrollA) enrollA.textContent = state.A.name;
   if (enrollB) enrollB.textContent = state.B.name;
+}
+
+// ── live scenario control (simulate mode only) ────────────────────────────────
+
+function updateScenarioControl(simulated, scenario) {
+  const control = document.getElementById("scenario-live-control");
+  const select  = document.getElementById("live-scenario");
+  if (!control) return;
+  control.hidden = !simulated;
+  if (simulated && select && scenario) select.value = scenario;
+}
+
+function setLiveScenario() {
+  const select = document.getElementById("live-scenario");
+  if (!select || !ws || ws.readyState !== WebSocket.OPEN) return;
+  ws.send(JSON.stringify({ type: "set_scenario", scenario: select.value }));
 }
 
 function updateBaselineIndicator() {
@@ -1516,6 +1757,67 @@ function applyReducedMotion() {
 // ── setup overlay ─────────────────────────────────────────────────────────────
 
 let _scannedDevices = [];
+let _knownUsers      = [];
+
+async function loadKnownUsers() {
+  try {
+    const res  = await fetch("/api/users");
+    const data = await res.json();
+    _knownUsers = data.users || [];
+  } catch (e) {
+    _knownUsers = [];
+  }
+  ["A", "B"].forEach(populateUserSelect);
+}
+
+function populateUserSelect(partner) {
+  const sel = document.getElementById(`setup-user-${partner}`);
+  if (!sel) return;
+  const prevValue = sel.value;
+  sel.innerHTML = "";
+
+  const placeholder = document.createElement("option");
+  placeholder.value = "";
+  placeholder.textContent = partner === "B" ? "— none / select user —" : "— select or add user —";
+  sel.appendChild(placeholder);
+
+  _knownUsers.forEach(u => {
+    const opt = document.createElement("option");
+    opt.value = u.id;
+    opt.textContent = u.name;
+    sel.appendChild(opt);
+  });
+
+  const newOpt = document.createElement("option");
+  newOpt.value = "__new__";
+  newOpt.textContent = "+ new user…";
+  sel.appendChild(newOpt);
+
+  if (prevValue) sel.value = prevValue;
+}
+
+function onUserSelectChange(partner) {
+  const sel       = document.getElementById(`setup-user-${partner}`);
+  const nameInput = document.getElementById(`setup-name-${partner}`);
+  if (sel.value === "__new__") {
+    nameInput.hidden = false;
+    nameInput.value = "";
+    nameInput.focus();
+  } else {
+    nameInput.hidden = true;
+  }
+}
+
+function resolvePartnerName(partner) {
+  const sel       = document.getElementById(`setup-user-${partner}`);
+  const nameInput = document.getElementById(`setup-name-${partner}`);
+  if (sel.value === "__new__") return nameInput.value.trim();
+  if (sel.value) {
+    const user = _knownUsers.find(u => u.id === sel.value);
+    return user ? user.name : "";
+  }
+  return "";
+}
 
 async function scanDevices() {
   const statusEl = document.getElementById("scan-status");
@@ -1556,8 +1858,8 @@ async function scanDevices() {
 }
 
 async function startSession() {
-  const nameA = (document.getElementById("setup-name-A").value.trim()) || "Partner A";
-  const nameB = (document.getElementById("setup-name-B").value.trim()) || "Partner B";
+  const nameA = resolvePartnerName("A") || "Partner A";
+  const nameB = resolvePartnerName("B") || "Partner B";
   const addrA = document.getElementById("setup-device-A").value;
   const addrB = document.getElementById("setup-device-B").value;
   const errorEl = document.getElementById("setup-error");
@@ -1600,12 +1902,14 @@ async function startSession() {
 }
 
 async function startSimulated() {
-  const nameA = (document.getElementById("setup-name-A").value.trim()) || "Partner A";
-  const nameB = (document.getElementById("setup-name-B").value.trim()) || "Partner B";
+  const nameA = resolvePartnerName("A") || "Partner A";
+  const nameB = resolvePartnerName("B") || "Partner B";
   try {
     const res = await fetch("/api/configure", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
+      // starts at the default scenario (low activation / low coupling) — use
+      // the live "scenario" selector in the header to switch mid-session
       body: JSON.stringify({ simulate: true, names: [nameA, nameB], bpm: [68, 75] }),
     });
     const data = await res.json();
@@ -1619,7 +1923,10 @@ async function checkSetupNeeded() {
   try {
     const res  = await fetch("/api/state");
     const data = await res.json();
-    if (!data.configured) overlay.hidden = false;
+    if (!data.configured) {
+      overlay.hidden = false;
+      loadKnownUsers();
+    }
   } catch (e) { /* server not ready yet — overlay stays hidden */ }
 }
 
@@ -1691,5 +1998,9 @@ document.addEventListener("DOMContentLoaded", () => {
     redrawDualTrace();
     redrawRecActivationTrace("A");
     redrawRecActivationTrace("B");
+    redrawDyadicTrace();
   });
+
+  redrawDyadicTrace();
+  setupDyadicTooltip();
 });

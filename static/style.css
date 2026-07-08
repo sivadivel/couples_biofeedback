@@ -110,6 +110,27 @@ body {
   line-height: 1;
   margin-left: auto;
 }
+
+.scenario-live-control {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.scenario-live-control[hidden] { display: none; }
+.scenario-live-label {
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+.scenario-live-control > select {
+  font-family: var(--font);
+  font-size: 12px;
+  padding: 5px 8px;
+  border-radius: var(--radius);
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--text);
+  cursor: pointer;
+}
 .btn-clear {
   color: var(--text-secondary);
   font-size: 12px;
@@ -366,6 +387,13 @@ body {
   color: var(--text);
 }
 .tile-value.breach { color: var(--danger); }
+.tile-value.tile-gated {
+  font-size: 11px;
+  font-weight: 500;
+  font-variant-numeric: normal;
+  color: var(--text-secondary);
+  font-style: italic;
+}
 .tile-unit {
   font-size: 10px;
   color: var(--text-secondary);
@@ -403,7 +431,7 @@ body {
   width: 0%;
 }
 
-/* ── bottom row: dyadic + transcript side by side ─────────────────── */
+/* ── bottom row: session transcript ────────────────────────────────── */
 .bottom-row {
   display: flex;
   flex-direction: column;
@@ -416,7 +444,67 @@ body {
   border: 1px solid var(--border);
   border-radius: var(--radius);
   padding: 16px;
+  margin-bottom: var(--gap);
 }
+
+.dyadic-trace-wrap {
+  position: relative;
+  margin-bottom: 10px;
+}
+.dyadic-trace-canvas {
+  width: 100%;
+  height: 110px;
+  display: block;
+  border-radius: var(--radius);
+}
+.dyadic-phase-canvas {
+  width: 100%;
+  height: 18px;
+  display: block;
+  margin-top: 2px;
+}
+.dyadic-tooltip {
+  position: absolute;
+  pointer-events: none;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 4px 8px;
+  font-size: 11px;
+  color: var(--text);
+  white-space: nowrap;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.15);
+  z-index: 5;
+}
+
+.dyadic-legend {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  font-size: 11px;
+  color: var(--text-secondary);
+  margin-bottom: 10px;
+}
+.legend-swatch {
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  border-radius: 2px;
+  margin-right: 3px;
+}
+.legend-swatch.legend-a { background: var(--partner-a); }
+.legend-swatch.legend-b { background: var(--partner-b); }
+.legend-note { font-style: italic; }
+.legend-dot {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  margin-right: 3px;
+}
+.legend-dot.legend-inphase   { background: var(--calm); }
+.legend-dot.legend-antiphase { background: #e67e22; }
 
 .dyadic-header {
   display: flex;
@@ -1276,10 +1364,19 @@ body.mode-b {
 }
 
 .setup-partner {
-  display: grid;
-  grid-template-columns: 72px 1fr 1fr;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.setup-partner-row {
+  display: flex;
   align-items: center;
   gap: 10px;
+}
+.setup-partner-row > select {
+  flex: 1;
+  min-width: 0;
 }
 
 .setup-partner-label {
@@ -1290,6 +1387,8 @@ body.mode-b {
 .setup-partner-label.b { color: var(--partner-b); }
 
 .setup-name-input {
+  width: 100%;
+  box-sizing: border-box;
   padding: 6px 10px;
   border: 1px solid var(--border);
   border-radius: var(--radius);
@@ -1341,3 +1440,192 @@ body.mode-b {
   font-size: 12px;
 }
 .btn-simulate:hover { border-color: var(--text-secondary); color: var(--text); }
+
+/* ── ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ */
+/* ── MEDITATE — standalone soundscape screen ─────────────────────────── */
+
+body.meditate-body {
+  background: #f0faf7;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  min-height: 100vh;
+}
+[data-theme="dark"] body.meditate-body { background: #141a20; }
+
+.meditate-header {
+  width: 100%;
+  padding: 16px 24px;
+  display: flex;
+  align-items: center;
+  border-bottom: 1px solid var(--border);
+  background: var(--surface);
+}
+.meditate-title {
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--calm);
+}
+
+.meditate-main {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 36px;
+  padding: 40px 24px;
+  width: 100%;
+  max-width: 480px;
+  margin: 0 auto;
+}
+
+/* pulsing orb */
+.meditate-orb-wrap {
+  position: relative;
+  width: 220px;
+  height: 220px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.meditate-orb {
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  background: radial-gradient(circle at 35% 30%, #2fc4a0, var(--calm));
+  opacity: 0.85;
+  animation: meditate-breathe 6s ease-in-out infinite;
+  transition: background 1.2s ease;
+}
+.meditate-orb.zone-mid {
+  background: radial-gradient(circle at 35% 30%, #e08a2e, var(--warning));
+}
+.meditate-orb.zone-high {
+  background: radial-gradient(circle at 35% 30%, #d9503f, var(--danger));
+}
+@keyframes meditate-breathe {
+  0%, 100% { transform: scale(0.92); }
+  50%      { transform: scale(1.04); }
+}
+.meditate-orb-center {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  pointer-events: none;
+}
+.meditate-score {
+  font-size: 40px;
+  font-weight: 700;
+  color: #fff;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+  text-shadow: 0 1px 4px rgba(0,0,0,0.25);
+}
+.meditate-score-unit {
+  font-size: 11px;
+  color: rgba(255,255,255,0.85);
+  text-shadow: 0 1px 3px rgba(0,0,0,0.2);
+}
+.meditate-zone {
+  margin-top: 8px;
+  font-size: 13px;
+  font-weight: 500;
+  color: #fff;
+  text-shadow: 0 1px 3px rgba(0,0,0,0.2);
+}
+
+/* sound layer meters */
+.meditate-layers {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.meditate-layer {
+  display: grid;
+  grid-template-columns: 96px 1fr;
+  align-items: center;
+  gap: 10px;
+}
+.meditate-layer-label {
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+.meditate-layer-track {
+  height: 6px;
+  border-radius: 3px;
+  background: var(--border);
+  overflow: hidden;
+}
+.meditate-layer-fill {
+  height: 100%;
+  width: 0%;
+  background: var(--calm);
+  transition: width 0.3s ease;
+}
+
+.meditate-hint {
+  font-size: 12px;
+  color: var(--warning);
+  text-align: center;
+  max-width: 340px;
+}
+
+.meditate-footer {
+  padding: 16px 24px 28px;
+  text-align: center;
+  font-size: 12px;
+  color: var(--text-secondary);
+  line-height: 1.6;
+}
+
+/* meditation results view */
+.meditate-results {
+  max-width: 640px;
+  margin: 0 auto;
+  padding: 24px 16px 40px;
+}
+.meditate-results-tiles {
+  grid-template-columns: repeat(3, 1fr);
+  margin-bottom: 20px;
+}
+.meditate-chart-wrap {
+  margin-bottom: 24px;
+}
+.meditate-chart {
+  width: 100%;
+  height: 160px;
+  display: block;
+}
+.meditate-progress {
+  border-top: 1px solid var(--border);
+  padding-top: 16px;
+  margin-bottom: 4px;
+}
+.meditate-progress h3 {
+  font-size: 13px;
+  text-transform: lowercase;
+  color: var(--text-secondary);
+  margin: 0 0 10px;
+}
+.meditate-progress-first {
+  font-size: 13px;
+  color: var(--text-secondary);
+  margin-bottom: 20px;
+}
+
+.meditation-narrative {
+  border-top: 1px solid var(--border);
+  padding-top: 16px;
+  margin-bottom: 20px;
+}
+.meditation-narrative h3 {
+  font-size: 13px;
+  text-transform: lowercase;
+  color: var(--text-secondary);
+  margin: 0 0 10px;
+}

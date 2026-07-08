@@ -1,0 +1,153 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>meditate · activation soundscape</title>
+  <link rel="stylesheet" href="/static/style.css" />
+</head>
+<body class="meditate-body">
+
+<p aria-live="polite" style="position:absolute;left:-9999px;">
+  Meditation soundscape. Ambient sound layers fade in as physiological activation rises.
+</p>
+
+<!-- ── header ────────────────────────────────────────────────────────────── -->
+<header class="meditate-header" role="banner">
+  <span class="meditate-title">meditate · activation soundscape</span>
+  <button class="btn btn-theme" id="btn-theme-m" onclick="toggleDarkMode()" title="toggle dark mode" style="margin-left:auto;">◐</button>
+</header>
+
+<!-- ── setup overlay ─────────────────────────────────────────────────────── -->
+<div id="meditate-setup-overlay" class="setup-overlay" hidden>
+  <div class="setup-card">
+    <h2 class="setup-title">meditate setup</h2>
+    <p class="setup-subtitle">Power on your heart rate monitor, then scan to discover it.</p>
+
+    <button class="btn btn-scan" id="ms-btn-scan" onclick="scanMeditateDevices()">scan for devices</button>
+    <span class="scan-status" id="ms-scan-status"></span>
+
+    <div class="setup-partners">
+      <div class="setup-partner">
+        <span class="setup-partner-label a">you</span>
+        <div class="setup-partner-row">
+          <select class="setup-device-select" id="ms-user-select" onchange="onMeditateUserSelectChange()">
+            <option value="">— select or add user —</option>
+          </select>
+          <select class="setup-device-select" id="ms-device-select">
+            <option value="">— scan first —</option>
+          </select>
+        </div>
+        <input type="text" class="setup-name-input" id="ms-name-input"
+               placeholder="New user name" hidden />
+      </div>
+    </div>
+
+    <p class="setup-error" id="ms-setup-error" hidden></p>
+
+    <div class="setup-actions">
+      <button class="btn btn-primary" id="ms-btn-start" onclick="startMeditateSession(false)" disabled>begin</button>
+      <button class="btn btn-simulate" onclick="startMeditateSession(true)">simulate</button>
+    </div>
+  </div>
+</div>
+
+<!-- ── main body ─────────────────────────────────────────────────────────── -->
+<main class="meditate-main" role="main">
+
+  <div id="meditate-session-view">
+
+  <div class="meditate-orb-wrap">
+    <div class="meditate-orb" id="meditate-orb" aria-hidden="true"></div>
+    <div class="meditate-orb-center">
+      <span class="meditate-score" id="meditate-score">—</span>
+      <span class="meditate-score-unit">activation</span>
+      <span class="meditate-zone" id="meditate-zone">connecting…</span>
+    </div>
+  </div>
+
+  <div class="meditate-layers" aria-label="Soundscape layers">
+    <div class="meditate-layer">
+      <span class="meditate-layer-label">waves</span>
+      <div class="meditate-layer-track"><div class="meditate-layer-fill" id="layer-fill-waves"></div></div>
+    </div>
+    <div class="meditate-layer">
+      <span class="meditate-layer-label">seagulls</span>
+      <div class="meditate-layer-track"><div class="meditate-layer-fill" id="layer-fill-seagulls"></div></div>
+    </div>
+    <div class="meditate-layer">
+      <span class="meditate-layer-label">foghorn</span>
+      <div class="meditate-layer-track"><div class="meditate-layer-fill" id="layer-fill-foghorn"></div></div>
+    </div>
+  </div>
+
+  <button class="btn sound-btn" id="meditate-begin" onclick="beginSession()">begin session</button>
+
+  <div class="sound-control">
+    <button class="btn sound-btn" id="meditate-toggle" onclick="toggleMeditateSound()">start</button>
+    <input type="range" class="sound-volume" id="meditate-volume"
+           min="0" max="1" step="0.05" value="0.6"
+           aria-label="master volume"
+           oninput="onMeditateVolumeChange(this.value)">
+  </div>
+
+  <button class="btn sound-btn" id="meditate-finish" onclick="endMeditation()" hidden>finish session</button>
+
+  <p class="meditate-hint" id="meditate-hint" hidden>
+    Missing audio files — add waves.mp3, seagulls.mp3 and foghorn.mp3 to static/.
+  </p>
+
+  </div><!-- /meditate-session-view -->
+
+  <section id="meditate-results" class="meditate-results" hidden aria-label="Session results">
+    <div class="meditate-results-tiles metric-tiles">
+      <div class="metric-tile"><div class="tile-label">duration</div><div class="tile-value" id="mr-duration">—</div></div>
+      <div class="metric-tile"><div class="tile-label">activation avg</div><div class="tile-value" id="mr-act-mean">—</div></div>
+      <div class="metric-tile"><div class="tile-label">activation range</div><div class="tile-value" id="mr-act-range">—</div></div>
+      <div class="metric-tile"><div class="tile-label">time calm</div><div class="tile-value" id="mr-zone-calm">—</div></div>
+      <div class="metric-tile"><div class="tile-label">time moderate</div><div class="tile-value" id="mr-zone-moderate">—</div></div>
+      <div class="metric-tile"><div class="tile-label">time activated</div><div class="tile-value" id="mr-zone-activated">—</div></div>
+      <div class="metric-tile"><div class="tile-label">coherence avg / peak</div><div class="tile-value" id="mr-coherence">—</div></div>
+      <div class="metric-tile"><div class="tile-label">breathing trend</div><div class="tile-value" id="mr-resp-trend">—</div></div>
+      <div class="metric-tile"><div class="tile-label">activated episodes</div><div class="tile-value" id="mr-episodes">—</div></div>
+    </div>
+    <div class="meditate-chart-wrap">
+      <canvas id="meditate-chart" class="meditate-chart" aria-label="Activation over the session"></canvas>
+    </div>
+
+    <div class="meditate-progress">
+      <h3>your progress</h3>
+      <p class="meditate-progress-first" id="mp-first-note" hidden>
+        This is your first recorded session — come back after a few more to see progress here.
+      </p>
+      <div class="meditate-results-tiles metric-tiles" id="mp-tiles" hidden>
+        <div class="metric-tile"><div class="tile-label">sessions logged</div><div class="tile-value" id="mp-count">—</div></div>
+        <div class="metric-tile"><div class="tile-label">activation avg (all-time)</div><div class="tile-value" id="mp-avg-activation">—</div></div>
+        <div class="metric-tile"><div class="tile-label">time calm (all-time)</div><div class="tile-value" id="mp-avg-calm">—</div></div>
+      </div>
+      <div class="meditate-chart-wrap" id="mp-chart-wrap" hidden>
+        <canvas id="meditate-progress-chart" class="meditate-chart" aria-label="Activation average across recent sessions"></canvas>
+      </div>
+    </div>
+
+    <div class="meditation-narrative">
+      <h3>session narrative</h3>
+      <pre class="report-text" id="meditation-narrative-text">generating…</pre>
+    </div>
+    <button class="btn sound-btn" id="meditate-new-session" onclick="newMeditationSession()">new session</button>
+  </section>
+
+</main>
+
+<!-- ── footer ─────────────────────────────────────────────────────────────── -->
+<footer class="meditate-footer" role="contentinfo">
+  the waves never stop · the rest only joins when it needs to
+  <br />
+  <a href="/" class="back-link">← back to session</a>
+  &ensp;·&ensp;
+  <a href="/mode_b" class="back-link">recovery mode ↗</a>
+</footer>
+
+<script src="/static/meditate.js"></script>
+</body>
+</html>

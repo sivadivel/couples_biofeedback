@@ -345,6 +345,24 @@ def resp_cardiac_coherence(rr_ms, resp, fs_resp, fs=4.0):
 # =====================================================================
 # 3. DYADIC COUPLING  (the relational layer)
 # =====================================================================
+def moving_median_detrend(x, window_s, fs):
+    """
+    Spec v2 §7.1: subtract a moving median from an evenly-sampled series to
+    remove slow shared drift before cross-correlation -- linear detrend
+    (as windowed_lagged_xcorr already does internally) only removes a
+    straight-line trend and lets slower nonlinear drift inflate spurious
+    coupling. window_s is the moving-median window length in seconds.
+    """
+    x = np.asarray(x, float)
+    win = max(1, int(round(window_s * fs)))
+    if win % 2 == 0:
+        win += 1  # odd window -> centered median
+    if win >= len(x):
+        return x - np.median(x)
+    trend = signal.medfilt(x, kernel_size=win)
+    return x - trend
+
+
 def windowed_lagged_xcorr(a, b, fs, max_lag_s=4.0, detrend=True):
     """
     Time-lagged cross-correlation between two partners' evenly-sampled
@@ -390,6 +408,34 @@ def windowed_lagged_xcorr(a, b, fs, max_lag_s=4.0, detrend=True):
             "r_values": r_list, "lag_step_s": 1.0 / fs}
 
 
+def surrogate_test_coupling(a, b, fs, max_lag_s=4.0, n_surrogates=200, rng=None):
+    """
+    Spec v2 §7.3: circular-shift surrogate null test for windowed_lagged_xcorr.
+
+    Shuffles partner B's series by a random circular shift N times, recomputes
+    the peak lagged correlation against each shuffled copy, and reports where
+    the REAL peak_r falls relative to that null distribution -- so a coupling
+    value can be shown as "above chance" (p < 0.05) rather than a bare r,
+    which is the null-model check the v1 white paper flagged as missing.
+    """
+    real = windowed_lagged_xcorr(a, b, fs, max_lag_s=max_lag_s)
+    b = np.asarray(b, float)
+    n = len(b)
+    rng = rng if rng is not None else np.random.default_rng()
+    null_peaks = np.empty(n_surrogates)
+    for i in range(n_surrogates):
+        shift = int(rng.integers(1, n)) if n > 1 else 0
+        b_shifted = np.roll(b, shift)
+        null_peaks[i] = abs(windowed_lagged_xcorr(a, b_shifted, fs, max_lag_s=max_lag_s)["peak_r"])
+    p_value = float(np.mean(null_peaks >= abs(real["peak_r"])))
+    return {
+        **real,
+        "p_value": p_value,
+        "percentile": 100.0 * (1.0 - p_value),
+        "above_chance": p_value < 0.05,
+    }
+
+
 def common_grid_hr(rr_ms, t_start, t_end, fs=4.0):
     """Instantaneous HR resampled to a shared [t_start, t_end] grid so two
     partners' series are directly comparable for synchrony."""
@@ -407,15 +453,36 @@ class Baseline:
     """
     Per-partner resting baseline. EVERY threshold here is individual --
     population constants don't work. Collect a few minutes of calm
-    baseline, store mean/SD per metric, express live values as z-scores
-    or % change against it.
+    baseline and store ROBUST center/scale per metric (median / MAD,
+    spec v2 §2), not mean/SD -- a 2-5 min pre-session baseline almost
+    always contains a few movement artifacts, and mean/SD lets those
+    inflate the scale and compress every downstream z-score comparison.
+    Express live values as z-scores or % change against it.
     """
+
+    # Prevents divide-by-zero / over-sensitive z-scores on unusually stable
+    # baselines. [CAL] -- provisional, tune against ground truth (spec §10).
+    SCALE_FLOOR = {
+        "mean_hr":       1.5,   # bpm
+        "rmssd":         3.0,   # ms
+        "hf":            1e-4,  # normalized Lomb-Scargle power (small units)
+        "coherence":     0.01,  # ratio
+        "resp_rate":     1.0,   # breaths/min
+        "rsa_corrected": 1e-4,  # alias of hf
+    }
+
     def __init__(self):
         self.stats = {}
+        self.meta = {}  # metric_name -> {"n": sample count, "clean_fraction": float | None}
 
-    def fit(self, metric_name, values):
+    def fit(self, metric_name, values, clean_fraction=None):
         v = np.asarray(values, float)
-        self.stats[metric_name] = (float(v.mean()), float(v.std() + 1e-9))
+        center = float(np.median(v))
+        mad = float(np.median(np.abs(v - center)))
+        floor = self.SCALE_FLOOR.get(metric_name, 1e-6)
+        scale = max(1.4826 * mad, floor)
+        self.stats[metric_name] = (center, scale)
+        self.meta[metric_name] = {"n": int(v.size), "clean_fraction": clean_fraction}
         return self
 
     def z(self, metric_name, value):
@@ -427,20 +494,28 @@ class Baseline:
         return 100.0 * (value - m) / m
 
 
-def dpa_flag(mean_hr, baseline_hr, abs_thresh=95.0, rel_thresh=0.10):
+def dpa_flag(z_hr, z_rmssd, hr_now, t_hr_z, t_rmssd_z=1.0, hr_ceiling=95.0):
     """
-    Gottman Diffuse Physiological Arousal / flooding detector.
+    Gottman Diffuse Physiological Arousal / flooding detector -- spec v2 §6.
 
-    Flags when HR exceeds EITHER an absolute ceiling (~95-100 bpm) OR the
-    partner's personal baseline by `rel_thresh` (10% default; some use
-    15-20%). In a real stream, require this to be SUSTAINED for N seconds
-    before raising it -- and pair it with the intervention (a ~20-minute
-    break with active distraction, since norepinephrine clears slowly).
+    Two-signal primary criterion, BOTH required: HR elevated vs personal
+    baseline (z_hr >= t_hr_z) AND RMSSD suppressed vs personal baseline
+    (-z_rmssd >= t_rmssd_z). Talking raises HR but does not collapse RMSSD
+    the way sympathetic flooding does, so requiring both cuts speech-driven
+    false positives that a HR-only rule (v1) was prone to.
+
+    Independent absolute ceiling (hr_now >= hr_ceiling) is kept as an
+    escape hatch for already-elevated baselines.
+
+    This function is a stateless, single-instant check. The caller is
+    responsible for sustain/clear hysteresis across calls (spec wants
+    sustained >= 10s to raise, clear only after >= 5s continuously false --
+    see PartnerProcessor's flood-state tracking).
     """
-    rel_hit = mean_hr >= baseline_hr * (1.0 + rel_thresh)
-    abs_hit = mean_hr >= abs_thresh
-    return {"flooded": bool(rel_hit or abs_hit),
-            "by_relative": bool(rel_hit), "by_absolute": bool(abs_hit)}
+    primary_hit = bool(z_hr >= t_hr_z and -z_rmssd >= t_rmssd_z)
+    ceiling_hit = bool(hr_now >= hr_ceiling)
+    return {"flooded": primary_hit or ceiling_hit,
+            "by_primary": primary_hit, "by_ceiling": ceiling_hit}
 
 
 def activation_index(metrics, baseline, weights=None):

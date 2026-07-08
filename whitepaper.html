@@ -504,10 +504,16 @@ tr:last-child td { border-bottom: none; }
 
 <p>
   The large number under each partner's heart rate is their <strong>activation
-  index</strong> — a composite of all physiological signals expressed as a single
-  0–100 score against their personal baseline. Think of it as a body-state thermometer.
-  Below it, a scrolling time series shows the last three minutes of activation history,
-  moving from left to right. Labels along the bottom show the time scale (−3m, −2m, −1m, now).
+  index</strong> — a robust two-signal score (heart rate elevation + heart rhythm
+  variability suppression, each measured against their own personal baseline)
+  expressed on a 0–100 scale. Think of it as a body-state thermometer. It is
+  anchored near the bottom of the moderate zone: a partner whose current
+  physiology matches their own resting baseline reads there, not at a neutral
+  midpoint or deep calm — the score moves toward high with a real departure
+  above baseline, and into the calm zone with genuine down-regulation below
+  it. Below it, a
+  scrolling time series shows the last ten minutes of activation history,
+  moving from left to right. Labels along the bottom show the time scale (−10m, −5m, now).
 </p>
 
 <table>
@@ -521,7 +527,7 @@ tr:last-child td { border-bottom: none; }
     </tr>
     <tr>
       <td><strong>Moderate</strong></td><td>35–65</td><td>Amber</td>
-      <td>Elevated arousal — engaged, mildly stressed, or emotionally involved. Watch the direction: rising is an early warning, falling is positive.</td>
+      <td>Elevated arousal — engaged, mildly stressed, or emotionally involved. The scale is anchored so a partner at their own baseline reads near the bottom of this zone, not a neutral 50 or deep calm — the low end of moderate is where ordinary resting fluctuation lives; it's the upper end and crossing into high that signal a real departure. Watch the direction: rising warrants attention, falling is positive.</td>
     </tr>
     <tr>
       <td><strong>High</strong></td><td>65–100</td><td>Red</td>
@@ -569,10 +575,12 @@ tr:last-child td { border-bottom: none; }
 <p>
   This tile measures how much of the heart's variability falls within the
   breathing-frequency range — the physiological signature of the vagal brake being
-  applied in coordination with each breath [7]. When someone is stressed and breathing
-  irregularly, this number falls. When they are breathing slowly and steadily, it rises.
-  During recovery breathing exercises, watching vagal activity rise confirms that the
-  paced breathing is engaging the parasympathetic system, not just passing time.
+  applied in coordination with each breath [7]. It is shaped by respiration as much as
+  by autonomic state, so it is only computed outside of speech and shows "paused
+  (speech)" during natural conversation, where irregular breathing makes it
+  uninterpretable. During recovery breathing exercises, watching vagal activity rise
+  confirms that the paced breathing is engaging the parasympathetic system, not
+  just passing time.
 </p>
 
 <h3>Respiration rate</h3>
@@ -585,16 +593,18 @@ tr:last-child td { border-bottom: none; }
   is irregular.
 </p>
 
-<h3>Coherence</h3>
+<h3>Coherence — resonance / 0.1 Hz rhythm</h3>
 <p>
   Coherence measures how <em>organized</em> the heart rhythm is, not just how much it
-  varies. A high-coherence rhythm shows a single, smooth oscillation — the
-  physiological signature of a self-regulated state [9]. A low-coherence rhythm is
-  fragmented and irregular. Coherence often drops before heart rate rises visibly —
-  it can be an early warning of stress that arrives before the conscious experience
-  of feeling stressed. The bar graph fills from left to right; a rising bar during a
-  recovery break is the clearest physiological confirmation that down-regulation is
-  actually occurring.
+  varies — a high-coherence rhythm shows a single, smooth oscillation near the
+  cardiovascular system's resonant frequency (≈0.1 Hz), the signature of paced
+  breathing around 5.5–6 breaths/min [9]. This is not a general early-warning
+  emotional signal: it requires a 120-second stationary window and is only
+  meaningful during controlled, paced breathing, so it is scoped to the recovery
+  screen and shows "paused (speech)" or "warming up" everywhere else, including
+  during ordinary conversation. The bar graph fills from left to right; a rising
+  bar during a recovery break is the clearest physiological confirmation that
+  down-regulation is actually occurring.
 </p>
 
 <h3>State description</h3>

@@ -8,7 +8,18 @@
       "Bash(timeout 5 .venv/bin/python main.py --simulate)",
       "Bash(/Users/levidavis/Desktop/biofeedback/.venv/bin/python *)",
       "WebSearch",
-      "Bash(.venv/bin/python *)"
+      "Bash(.venv/bin/python *)",
+      "Skill(run)",
+      "Bash(python launch.py --simulate --names \"Alex\" \"Jordan\" --bpm 68 75)",
+      "Bash(echo \"PID: $!\")",
+      "Bash(curl -s http://localhost:8765/)",
+      "Bash(.venv/bin/python launch.py --simulate --names \"Solo\" --port 8799)",
+      "Bash(curl -s -o /dev/null -w \"%{http_code}\\\\n\" http://localhost:8799/meditate)",
+      "Bash(curl -s -o /dev/null -w \"%{http_code}\\\\n\" http://localhost:8799/static/meditate.js)",
+      "Bash(curl -s -o /dev/null -w \"%{http_code}\\\\n\" http://localhost:8799/static/style.css)",
+      "Bash(kill %1)",
+      "Read(//private/tmp/**)",
+      "Bash(jobs)"
     ]
   }
 }

@@ -294,6 +294,8 @@
           <select class="setup-device-select" id="setup-user-A" onchange="onUserSelectChange('A')">
             <option value="">— select or add user —</option>
           </select>
+          <button type="button" class="setup-user-delete" id="setup-user-delete-A"
+                  title="Delete this user account" onclick="deleteSelectedUser('A')" hidden>&times;</button>
           <select class="setup-device-select" id="setup-device-A">
             <option value="">— scan first —</option>
           </select>
@@ -308,6 +310,8 @@
           <select class="setup-device-select" id="setup-user-B" onchange="onUserSelectChange('B')">
             <option value="">— none / select user —</option>
           </select>
+          <button type="button" class="setup-user-delete" id="setup-user-delete-B"
+                  title="Delete this user account" onclick="deleteSelectedUser('B')" hidden>&times;</button>
           <select class="setup-device-select" id="setup-device-B">
             <option value="">— none —</option>
           </select>

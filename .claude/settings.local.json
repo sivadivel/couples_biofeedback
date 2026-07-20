@@ -19,7 +19,14 @@
       "Bash(curl -s -o /dev/null -w \"%{http_code}\\\\n\" http://localhost:8799/static/style.css)",
       "Bash(kill %1)",
       "Read(//private/tmp/**)",
-      "Bash(jobs)"
+      "Bash(jobs)",
+      "Bash(python3 -m venv .venv)",
+      "Bash(.venv/bin/pip install *)",
+      "Bash(python3 *)",
+      "Bash(.venv/bin/python launch.py --simulate --names \"Alex\" \"Jordan\" --scenario high_high)",
+      "Bash(curl -s -o /dev/null -w \"%{http_code}\\\\n\" http://localhost:8765/)",
+      "Read(//tmp/**)",
+      "Bash(wait)"
     ]
   }
 }

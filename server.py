@@ -1237,6 +1237,24 @@ class BiofeedbackServer:
         user = user_registry.create_user(name)
         return web.Response(content_type="application/json", text=json.dumps(user))
 
+    async def users_delete_handler(self, request: web.Request) -> web.Response:
+        user_id = request.match_info["id"]
+        found = user_registry.delete_user(user_id)
+        if not found:
+            return web.Response(status=404, content_type="application/json",
+                                text=json.dumps({"error": "user not found"}))
+        # Also remove this person's meditation history — deleting the account
+        # should delete their personal data, not just the registry entry.
+        # Shared couple session logs under sessions/ are left alone since they
+        # aren't owned by a single user and may still belong to a partner.
+        history_path = self._history_path_for_id(user_id)
+        history_path.unlink(missing_ok=True)
+        return web.Response(content_type="application/json", text=json.dumps({"deleted": user_id}))
+
+    def _history_path_for_id(self, user_id: str) -> Path:
+        history_dir = Path(__file__).parent / "history"
+        return history_dir / f"{user_id}.ndjson"
+
     async def scan_handler(self, request: web.Request) -> web.Response:
         from ble import scan_for_hr_monitors
         try:
@@ -1499,6 +1517,7 @@ class BiofeedbackServer:
         app.router.add_post("/api/configure", self.configure_handler)
         app.router.add_get("/api/users", self.users_list_handler)
         app.router.add_post("/api/users", self.users_create_handler)
+        app.router.add_delete("/api/users/{id}", self.users_delete_handler)
         return app
 
     async def run(self) -> None:

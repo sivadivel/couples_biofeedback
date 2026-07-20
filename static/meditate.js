@@ -467,11 +467,15 @@ function populateMeditateUserSelect() {
   sel.appendChild(newOpt);
 
   if (prevValue) sel.value = prevValue;
+
+  const deleteBtn = document.getElementById("ms-user-delete");
+  if (deleteBtn) deleteBtn.hidden = !sel.value || sel.value === "__new__";
 }
 
 function onMeditateUserSelectChange() {
   const sel       = document.getElementById("ms-user-select");
   const nameInput = document.getElementById("ms-name-input");
+  const deleteBtn = document.getElementById("ms-user-delete");
   if (sel.value === "__new__") {
     nameInput.hidden = false;
     nameInput.value = "";
@@ -479,6 +483,7 @@ function onMeditateUserSelectChange() {
   } else {
     nameInput.hidden = true;
   }
+  if (deleteBtn) deleteBtn.hidden = !sel.value || sel.value === "__new__";
 }
 
 function resolveMeditateUserName() {
@@ -490,6 +495,27 @@ function resolveMeditateUserName() {
     return user ? user.name : "";
   }
   return "";
+}
+
+async function deleteSelectedMeditateUser() {
+  const sel = document.getElementById("ms-user-select");
+  const id  = sel.value;
+  if (!id || id === "__new__") return;
+  const user = _msKnownUsers.find(u => u.id === id);
+  const label = user ? user.name : id;
+  if (!confirm(`Delete the account "${label}"? This also deletes their saved meditation history. This can't be undone.`)) {
+    return;
+  }
+  try {
+    const res = await fetch(`/api/users/${encodeURIComponent(id)}`, { method: "DELETE" });
+    if (!res.ok) throw new Error(`delete failed (${res.status})`);
+  } catch (e) {
+    alert("Couldn't delete that user — please try again.");
+    return;
+  }
+  sel.value = "";
+  await loadMeditateUsers();
+  onMeditateUserSelectChange();
 }
 
 async function scanMeditateDevices() {

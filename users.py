@@ -45,3 +45,13 @@ def create_user(name: str) -> dict:
     existing.append(user)
     USERS_FILE.write_text(json.dumps({"users": existing}, indent=2))
     return user
+
+
+def delete_user(user_id: str) -> bool:
+    """Removes a user from the registry. Returns True if a matching user was found."""
+    existing = list_users()
+    remaining = [u for u in existing if u["id"] != user_id]
+    if len(remaining) == len(existing):
+        return False
+    USERS_FILE.write_text(json.dumps({"users": remaining}, indent=2))
+    return True

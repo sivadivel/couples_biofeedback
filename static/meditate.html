@@ -34,6 +34,8 @@
           <select class="setup-device-select" id="ms-user-select" onchange="onMeditateUserSelectChange()">
             <option value="">— select or add user —</option>
           </select>
+          <button type="button" class="setup-user-delete" id="ms-user-delete"
+                  title="Delete this user account" onclick="deleteSelectedMeditateUser()" hidden>&times;</button>
           <select class="setup-device-select" id="ms-device-select">
             <option value="">— scan first —</option>
           </select>

@@ -428,7 +428,12 @@ class PartnerProcessor:
 
             rmssd_window_met = False
             mean_hr = rmssd = signal_quality = None
-            flooded = False
+            # Default to the persisted hysteresis state, not False -- a window
+            # with too little clean RR data (BLE dropout, motion) must not be
+            # reported as an implicit flood-clear; that bypasses the >=5s
+            # clear timer in _update_flood_state and desyncs the flood banner
+            # from the (unaffected, still-elevated) activation trace.
+            flooded = self._flood_state
             dpa = None
             hr_baseline_pct = None
 
@@ -451,7 +456,7 @@ class PartnerProcessor:
                         flooded = self._update_flood_state(now, dpa["flooded"])
                         hr_baseline_pct = round(self.baseline.pct_change("mean_hr", mean_hr), 1)
                     else:
-                        self._update_flood_state(now, False)
+                        flooded = self._update_flood_state(now, False)
 
             motion_gated = signal_quality is not None and signal_quality < MOTION_QUALITY_GATE
             rmssd_ok = rmssd_window_met and not motion_gated

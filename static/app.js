@@ -1794,11 +1794,15 @@ function populateUserSelect(partner) {
   sel.appendChild(newOpt);
 
   if (prevValue) sel.value = prevValue;
+
+  const deleteBtn = document.getElementById(`setup-user-delete-${partner}`);
+  if (deleteBtn) deleteBtn.hidden = !sel.value || sel.value === "__new__";
 }
 
 function onUserSelectChange(partner) {
-  const sel       = document.getElementById(`setup-user-${partner}`);
-  const nameInput = document.getElementById(`setup-name-${partner}`);
+  const sel        = document.getElementById(`setup-user-${partner}`);
+  const nameInput  = document.getElementById(`setup-name-${partner}`);
+  const deleteBtn  = document.getElementById(`setup-user-delete-${partner}`);
   if (sel.value === "__new__") {
     nameInput.hidden = false;
     nameInput.value = "";
@@ -1806,6 +1810,7 @@ function onUserSelectChange(partner) {
   } else {
     nameInput.hidden = true;
   }
+  if (deleteBtn) deleteBtn.hidden = !sel.value || sel.value === "__new__";
 }
 
 function resolvePartnerName(partner) {
@@ -1817,6 +1822,27 @@ function resolvePartnerName(partner) {
     return user ? user.name : "";
   }
   return "";
+}
+
+async function deleteSelectedUser(partner) {
+  const sel = document.getElementById(`setup-user-${partner}`);
+  const id  = sel.value;
+  if (!id || id === "__new__") return;
+  const user = _knownUsers.find(u => u.id === id);
+  const label = user ? user.name : id;
+  if (!confirm(`Delete the account "${label}"? This also deletes their saved meditation history. This can't be undone.`)) {
+    return;
+  }
+  try {
+    const res = await fetch(`/api/users/${encodeURIComponent(id)}`, { method: "DELETE" });
+    if (!res.ok) throw new Error(`delete failed (${res.status})`);
+  } catch (e) {
+    alert("Couldn't delete that user — please try again.");
+    return;
+  }
+  sel.value = "";
+  await loadKnownUsers();
+  onUserSelectChange(partner);
 }
 
 async function scanDevices() {

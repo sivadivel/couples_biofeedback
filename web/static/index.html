@@ -1,0 +1,166 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Pulse — live biofeedback</title>
+<link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+
+<header class="top-bar">
+  <div class="brand">pulse</div>
+  <div class="room-badge" id="room-badge" hidden>
+    room <strong id="room-code-display"></strong>
+    <button id="btn-copy-link" class="btn-chip" title="Copy invite link">copy link</button>
+  </div>
+</header>
+
+<!-- ── Landing: no room yet ────────────────────────────────────────────── -->
+<section id="screen-landing" class="screen">
+  <div class="card">
+    <h1>Live heart-rate biofeedback</h1>
+    <p class="sub">Pair your heart rate strap, share a link with your partner, and watch your metrics together in real time — nothing is recorded.</p>
+    <label class="field">
+      your name
+      <input id="landing-name" type="text" maxlength="40" placeholder="Alex" autocomplete="off">
+    </label>
+    <button id="btn-start" class="btn-primary">Start a session</button>
+  </div>
+</section>
+
+<!-- ── Join: room code in URL, not connected yet ──────────────────────── -->
+<section id="screen-join" class="screen" hidden>
+  <div class="card">
+    <h1>Join session <span id="join-code-display" class="code-inline"></span></h1>
+    <p class="sub" id="join-status">checking room…</p>
+    <label class="field">
+      your name
+      <input id="join-name" type="text" maxlength="40" placeholder="Jordan" autocomplete="off">
+    </label>
+    <div class="field">
+      join as
+      <div class="segmented" id="join-partner-picker">
+        <button data-partner="A" class="seg-btn">Partner A</button>
+        <button data-partner="B" class="seg-btn">Partner B</button>
+      </div>
+    </div>
+    <button id="btn-join" class="btn-primary">Join</button>
+  </div>
+</section>
+
+<!-- ── Room: connected ─────────────────────────────────────────────────── -->
+<section id="screen-room" class="screen" hidden>
+
+  <div class="flood-banner" id="flood-banner" hidden>
+    <span id="flood-text"></span>
+  </div>
+
+  <section class="pairing-panel" id="pairing-panel">
+    <h2>Connect your heart rate monitor</h2>
+    <p class="sub">This device streams <strong id="pairing-who"></strong>'s data. Your partner pairs their own strap on their own device.</p>
+    <div class="pairing-actions">
+      <button id="btn-pair-bt" class="btn-primary">Pair via Bluetooth</button>
+      <button id="btn-pair-sim" class="btn-secondary">Simulate (dev)</button>
+    </div>
+    <p class="pairing-status" id="pairing-status"></p>
+  </section>
+
+  <section class="peer-status" id="peer-status"></section>
+
+  <nav class="mode-tabs" id="mode-tabs" hidden>
+    <button class="tab-btn active" data-mode="dashboard">Dashboard</button>
+    <button class="tab-btn" data-mode="recovery">Recovery</button>
+  </nav>
+
+  <!-- Dashboard -->
+  <section id="view-dashboard" class="view" hidden>
+    <div class="partner-grid">
+      <article class="partner-card" data-partner="A" id="card-A">
+        <header>
+          <span class="partner-dot dot-a"></span>
+          <span class="partner-name" id="name-A">Partner A</span>
+          <span class="baseline-pill" id="baseline-A">no baseline</span>
+        </header>
+        <div class="tile-grid">
+          <div class="tile"><div class="tile-label">HR</div><div class="tile-value"><span id="hr-A">—</span><span class="tile-unit">bpm</span></div></div>
+          <div class="tile"><div class="tile-label">HRV (RMSSD)</div><div class="tile-value"><span id="rmssd-A">—</span><span class="tile-unit">ms</span></div></div>
+          <div class="tile"><div class="tile-label">Coherence</div><div class="tile-value"><span id="coh-A">—</span></div></div>
+          <div class="tile"><div class="tile-label">Breathing</div><div class="tile-value"><span id="resp-A">—</span><span class="tile-unit">/min</span></div></div>
+        </div>
+        <div class="activation-row">
+          <div class="activation-label">activation</div>
+          <div class="activation-bar-wrap"><div class="activation-bar" id="act-bar-A"></div></div>
+          <div class="activation-num" id="act-num-A">—</div>
+          <div class="activation-dir" id="act-dir-A"></div>
+        </div>
+        <button class="btn-baseline" id="btn-baseline-A" data-partner="A" disabled>detecting automatically…</button>
+      </article>
+
+      <article class="partner-card" data-partner="B" id="card-B">
+        <header>
+          <span class="partner-dot dot-b"></span>
+          <span class="partner-name" id="name-B">Partner B</span>
+          <span class="baseline-pill" id="baseline-B">no baseline</span>
+        </header>
+        <div class="tile-grid">
+          <div class="tile"><div class="tile-label">HR</div><div class="tile-value"><span id="hr-B">—</span><span class="tile-unit">bpm</span></div></div>
+          <div class="tile"><div class="tile-label">HRV (RMSSD)</div><div class="tile-value"><span id="rmssd-B">—</span><span class="tile-unit">ms</span></div></div>
+          <div class="tile"><div class="tile-label">Coherence</div><div class="tile-value"><span id="coh-B">—</span></div></div>
+          <div class="tile"><div class="tile-label">Breathing</div><div class="tile-value"><span id="resp-B">—</span><span class="tile-unit">/min</span></div></div>
+        </div>
+        <div class="activation-row">
+          <div class="activation-label">activation</div>
+          <div class="activation-bar-wrap"><div class="activation-bar" id="act-bar-B"></div></div>
+          <div class="activation-num" id="act-num-B">—</div>
+          <div class="activation-dir" id="act-dir-B"></div>
+        </div>
+        <button class="btn-baseline" id="btn-baseline-B" data-partner="B" disabled>detecting automatically…</button>
+      </article>
+    </div>
+
+    <section class="trace-panel">
+      <h3>Activation, last 10 minutes</h3>
+      <canvas id="activation-trace" height="140"></canvas>
+      <div class="trace-legend">
+        <span><i class="dot-a"></i> <span id="legend-A">Partner A</span></span>
+        <span><i class="dot-b"></i> <span id="legend-B">Partner B</span></span>
+      </div>
+    </section>
+  </section>
+
+  <!-- Recovery / breathing -->
+  <section id="view-recovery" class="view" hidden>
+    <div class="breath-wrap">
+      <div class="breath-circle" id="breath-circle"><span id="breath-phase">breathe</span></div>
+      <div class="breath-pattern-picker">
+        <label>pattern
+          <select id="breath-pattern">
+            <option value="coherence">coherence (5.5s / 5.5s)</option>
+            <option value="box">box (4-4-4-4)</option>
+            <option value="4-7-8">4-7-8</option>
+          </select>
+        </label>
+      </div>
+    </div>
+    <div class="recovery-metrics">
+      <div class="recovery-row" data-partner="A">
+        <span class="partner-dot dot-a"></span>
+        <span id="rec-name-A">Partner A</span>
+        <div class="coh-bar-wrap"><div class="coh-bar" id="coh-bar-A"></div></div>
+        <span id="coh-val-A" class="coh-val">—</span>
+      </div>
+      <div class="recovery-row" data-partner="B">
+        <span class="partner-dot dot-b"></span>
+        <span id="rec-name-B">Partner B</span>
+        <div class="coh-bar-wrap"><div class="coh-bar" id="coh-bar-B"></div></div>
+        <span id="coh-val-B" class="coh-val">—</span>
+      </div>
+    </div>
+  </section>
+
+</section>
+
+<script src="/static/app.js"></script>
+</body>
+</html>

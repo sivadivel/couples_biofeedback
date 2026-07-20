@@ -1,0 +1,26 @@
+# This file lives at the repo root (not web/) because Fly uses the directory
+# containing fly.toml as the Docker build context, and the web app's image
+# needs both web/ and the shared root-level processor.py / specs/. Deploy
+# from the repo root: fly deploy
+# Fly.io terminates TLS at the edge, so Web Bluetooth's HTTPS requirement is
+# satisfied automatically once this is live under the assigned *.fly.dev domain.
+app = "pulse-biofeedback"          # change to your own unique app name before first deploy
+primary_region = "iad"             # pick the region closest to your users
+
+[build]
+  dockerfile = "web/Dockerfile"
+
+[env]
+  PORT = "8080"
+
+[http_service]
+  internal_port = 8080
+  force_https = true
+  auto_stop_machines = "stop"
+  auto_start_machines = true
+  min_machines_running = 0
+
+[[vm]]
+  cpu_kind = "shared"
+  cpus = 1
+  memory_mb = 256

@@ -17,7 +17,9 @@ import random
 import sys
 import time
 import webbrowser
+from pathlib import Path
 
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))  # shared processor.py lives at repo root
 from processor import PartnerProcessor
 from server import BiofeedbackServer
 import users as user_registry

@@ -10,6 +10,7 @@ import json
 import os
 import random
 import statistics
+import sys
 import time
 from collections import deque
 from datetime import datetime, timezone
@@ -17,6 +18,7 @@ from pathlib import Path
 
 from aiohttp import web, WSMsgType
 
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))  # shared processor.py lives at repo root
 from processor import PartnerProcessor, DyadicProcessor
 from transcription import transcribe_audio
 from voice_id import get_embedding, identify

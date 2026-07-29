@@ -6,11 +6,13 @@ WORKDIR /app
 COPY web/requirements.txt web/requirements.txt
 RUN pip install --no-cache-dir -r web/requirements.txt
 
-# Shared metric engine (unmodified) + the web app itself. ble.py, simulator.py,
-# transcription.py, etc. are intentionally not copied — this image never
-# imports them.
+# Shared metric engine (unmodified) + the web app itself. local_app/'s
+# ble.py, simulator.py, transcription.py, etc. are intentionally not
+# copied — this image never imports them.
 COPY processor.py .
+COPY activation_model.py .
 COPY specs/dyadic_biofeedback_metrics.py specs/dyadic_biofeedback_metrics.py
+COPY model/ model/
 COPY web/ web/
 
 ENV PORT=8080

@@ -16,6 +16,8 @@ import os
 import time
 import numpy as np
 
+import activation_model
+
 # ── add specs/ to path so we can import the reference module ──────────────────
 _SPECS = os.path.join(os.path.dirname(__file__), "specs")
 if _SPECS not in sys.path:
@@ -89,6 +91,14 @@ W_HR_TALK, W_RMSSD_TALK = 0.5, 0.5
 W_HR_RECOVERY, W_RMSSD_RECOVERY, W_VAGAL_RECOVERY = 0.3, 0.3, 0.4
 S_THRESH = 0.15  # activation-units/second, rising/falling slope threshold
 
+# activation_state_model(): EMA smoothing applied to the WESAD model's raw
+# P(activated) before scaling to 0-100. Logistic-regression probabilities
+# saturate near 0/1 much more readily than the z-score formula above, which
+# would otherwise make the index feel binary and destabilize direction/slope
+# (tuned against the old scale's noise characteristics).
+# [CAL] -- provisional, retune once live behavior is observed.
+ACTIVATION_MODEL_EMA_ALPHA = 0.3
+
 # Flooding (spec v2 §6)
 T_HR_PCT      = 0.11   # midpoint of the 10-12% band, converted to z-units per partner
 T_RMSSD_Z     = 1.0
@@ -118,6 +128,11 @@ STANDARD_BASELINE_STATS: dict[str, tuple[float, float]] = {
     "coherence":     (0.052, 0.018),
     "resp_rate":     (18.4, 1.7),
     "rsa_corrected": (0.0055, 0.0026),
+    # hr_std derived differently from the rest: median/MAD of the WESAD
+    # dataset's own "baseline" condition windows (n=557), since that's the
+    # activation model's training population rather than this module's
+    # synthetic profiles.
+    "hr_std":        (5.3, 1.7),
 }
 
 
@@ -146,6 +161,13 @@ def _resp_rate_from_rr(rr_ms: np.ndarray) -> float:
     from scipy import signal as scipy_signal
     pxx = scipy_signal.lombscargle(t, rr_c, 2 * np.pi * freqs, normalize=True)
     return float(freqs[np.argmax(pxx)] * 60.0)
+
+
+def _hr_std(rr_ms: np.ndarray) -> float:
+    """Std-dev of instantaneous HR (bpm) over a window -- distinct from
+    time_domain()'s sdnn, which is std-dev of the RR intervals themselves
+    (ms). This is the feature the WESAD activation model was trained on."""
+    return float(np.std(60000.0 / rr_ms))
 
 
 def _theil_sen_slope(t: list[float], y: list[float]) -> float:
@@ -203,6 +225,41 @@ def activation_state(metrics: dict, baseline: Baseline, mode: str = "conversatio
 
     return {"activation": activation, "d": d, "contribs": contribs,
             "z_hr": z_hr, "z_rmssd": z_rmssd, "used_vagal": use_vagal}
+
+
+def activation_state_model(metrics: dict, baseline: Baseline, mode: str, hr_std: float,
+                            coherence_window_met: bool, ema_prev: float | None) -> dict:
+    """
+    Activation index driven by the WESAD-trained classifier instead of the
+    hand-tuned z-score formula above -- calls activation_state() first purely
+    to get contribs/z_hr/z_rmssd/used_vagal (still needed by
+    compute_confidence() and describe_state()), then overrides `activation`
+    with the model's smoothed P(activated) x 100. Falls back silently to the
+    z-score activation on any failure (missing model file, a baseline fitted
+    before hr_std existed, etc).
+    """
+    s = activation_state(metrics, baseline, mode, coherence_window_met)
+    try:
+        variant = "recovery" if s["used_vagal"] else "conversation"
+
+        d_hr_mean   = metrics["mean_hr"] - baseline.stats["mean_hr"][0]
+        d_hr_std    = hr_std - baseline.stats["hr_std"][0]
+        d_log_rmssd = np.log1p(metrics["rmssd"]) - np.log1p(baseline.stats["rmssd"][0])
+        d_log_coherence = None
+        if variant == "recovery":
+            d_log_coherence = np.log1p(metrics["coherence"]) - np.log1p(baseline.stats["coherence"][0])
+
+        p = activation_model.predict_proba(variant, d_hr_mean, d_hr_std, d_log_rmssd, d_log_coherence)
+
+        new_ema = p if ema_prev is None else (
+            ACTIVATION_MODEL_EMA_ALPHA * p + (1 - ACTIVATION_MODEL_EMA_ALPHA) * ema_prev)
+
+        s["activation"] = float(np.clip(100.0 * new_ema, 0.0, 100.0))
+        s["ema_activation"] = new_ema
+        s["model_variant"] = variant
+    except Exception:
+        pass
+    return s
 
 
 def compute_confidence(c_hr: float, c_rmssd: float, signal_quality: float | None,
@@ -308,6 +365,7 @@ class PartnerProcessor:
 
         self.baseline: Baseline | None = None
         self._prev_activation: float | None = None
+        self._ema_activation: float | None = None  # activation_state_model()'s smoothed P(activated)
         self._session_start = time.monotonic()
         self._calm_start_ts: float | None = None
 
@@ -520,7 +578,7 @@ class PartnerProcessor:
             state_desc = None
             confidence = None
             mixed = False
-            if self.baseline is not None and "mean_hr" in self.baseline.stats:
+            if self.baseline is not None and "mean_hr" in self.baseline.stats and "hr_std" in self.baseline.stats:
                 # activation itself only needs HR+RMSSD (always available at
                 # mid cadence); pull the latest mid-tier values fresh here
                 rr_mid = self._rr_within(now, MID_WIN_S)
@@ -535,8 +593,11 @@ class PartnerProcessor:
                             "coherence": coherence,
                         }
                         try:
-                            s = activation_state(m, self.baseline, mode=self.mode,
-                                                 coherence_window_met=(coherence_window_met and not speech_gated and not hf_motion))
+                            s = activation_state_model(
+                                m, self.baseline, mode=self.mode, hr_std=_hr_std(rr_mid_clean),
+                                coherence_window_met=(coherence_window_met and not speech_gated and not hf_motion),
+                                ema_prev=self._ema_activation)
+                            self._ema_activation = s.get("ema_activation", self._ema_activation)
                             conf, mixed = compute_confidence(
                                 s["contribs"]["hr"], s["contribs"]["rmssd"],
                                 float(mid_mask.mean()) if len(mid_mask) else None,
@@ -602,6 +663,7 @@ class PartnerProcessor:
                 "confidence": round(confidence, 2) if confidence is not None else None,
                 "signals_mixed": mixed,
                 "used_vagal": act_result["used_vagal"] if act_result else False,
+                "model_variant": act_result.get("model_variant") if act_result else None,
                 "state_description": state_desc,
                 "calm_zone_s": calm_zone_s,
                 "speech_fraction": round(speech_fraction_slow, 2),
@@ -627,7 +689,7 @@ class PartnerProcessor:
 
         samples: dict[str, list[float]] = {
             "mean_hr": [], "rmssd": [], "hf": [],
-            "coherence": [], "resp_rate": [],
+            "coherence": [], "resp_rate": [], "hr_std": [],
         }
 
         # slide a 60 s window backward from now in 30 s steps
@@ -650,6 +712,7 @@ class PartnerProcessor:
                     samples["hf"].append(fd["hf"])
                     samples["coherence"].append(coh if np.isfinite(coh) else 0.0)
                     samples["resp_rate"].append(rsp if np.isfinite(rsp) else 15.0)
+                    samples["hr_std"].append(_hr_std(rr_c))
             win_end -= BASELINE_STEP_S
 
         if not samples["mean_hr"]:
@@ -666,6 +729,7 @@ class PartnerProcessor:
             samples["hf"]        = [fd["hf"]]
             samples["coherence"] = [coh if np.isfinite(coh) else 0.0]
             samples["resp_rate"] = [rsp if np.isfinite(rsp) else 15.0]
+            samples["hr_std"]    = [_hr_std(rr_c)]
 
         bl = Baseline()
         clean_fraction = len(rr_full) and None
@@ -675,6 +739,7 @@ class PartnerProcessor:
         bl.fit("coherence",     samples["coherence"])
         bl.fit("resp_rate",     samples["resp_rate"])
         bl.fit("rsa_corrected", samples["hf"])  # alias, kept for compatibility
+        bl.fit("hr_std",        samples["hr_std"])
 
         self.baseline = bl
         return True
@@ -689,6 +754,7 @@ class PartnerProcessor:
         """
         self.baseline = standard_baseline()
         self._prev_activation = None
+        self._ema_activation = None
         self._calm_start_ts = None
         return True
 
@@ -705,6 +771,7 @@ class PartnerProcessor:
         """Remove the fitted baseline and reset activation state."""
         self.baseline = None
         self._prev_activation = None
+        self._ema_activation = None
         self._calm_start_ts = None
         self._trace_act.clear()
         self._trace_act_t.clear()

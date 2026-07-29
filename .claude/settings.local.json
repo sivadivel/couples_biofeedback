@@ -26,7 +26,11 @@
       "Bash(.venv/bin/python launch.py --simulate --names \"Alex\" \"Jordan\" --scenario high_high)",
       "Bash(curl -s -o /dev/null -w \"%{http_code}\\\\n\" http://localhost:8765/)",
       "Read(//tmp/**)",
-      "Bash(wait)"
+      "Bash(wait)",
+      "Bash(tar czf *)",
+      "Bash(git add *)",
+      "Bash(git commit -m ' *)",
+      "Bash(git push *)"
     ]
   }
 }

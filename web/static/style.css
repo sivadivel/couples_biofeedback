@@ -191,6 +191,7 @@ body {
 .tile-label { font-size: 0.7rem; color: var(--text-faint); text-transform: uppercase; letter-spacing: 0.05em; }
 .tile-value { font-size: 1.4rem; font-weight: 600; margin-top: 2px; }
 .tile-unit { font-size: 0.75rem; color: var(--text-faint); margin-left: 4px; font-weight: 400; }
+.tile-delta { font-size: 0.72rem; color: var(--text-faint); margin-top: 2px; }
 
 .activation-row {
   display: flex; align-items: center; gap: 10px; margin-bottom: 14px;

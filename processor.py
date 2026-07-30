@@ -578,6 +578,8 @@ class PartnerProcessor:
             state_desc = None
             confidence = None
             mixed = False
+            hr_std_val = None
+            d_hr_mean = d_hr_std = d_rmssd = None
             if self.baseline is not None and "mean_hr" in self.baseline.stats and "hr_std" in self.baseline.stats:
                 # activation itself only needs HR+RMSSD (always available at
                 # mid cadence); pull the latest mid-tier values fresh here
@@ -592,9 +594,15 @@ class PartnerProcessor:
                             "resp_rate": resp_rate,
                             "coherence": coherence,
                         }
+                        # plain linear deltas for display -- computed independent of the
+                        # model call below so the tiles stay informative even if that fails
+                        hr_std_val = _hr_std(rr_mid_clean)
+                        d_hr_mean = m["mean_hr"] - self.baseline.stats["mean_hr"][0]
+                        d_hr_std  = hr_std_val - self.baseline.stats["hr_std"][0]
+                        d_rmssd   = m["rmssd"] - self.baseline.stats["rmssd"][0]
                         try:
                             s = activation_state_model(
-                                m, self.baseline, mode=self.mode, hr_std=_hr_std(rr_mid_clean),
+                                m, self.baseline, mode=self.mode, hr_std=hr_std_val,
                                 coherence_window_met=(coherence_window_met and not speech_gated and not hf_motion),
                                 ema_prev=self._ema_activation)
                             self._ema_activation = s.get("ema_activation", self._ema_activation)
@@ -664,6 +672,10 @@ class PartnerProcessor:
                 "signals_mixed": mixed,
                 "used_vagal": act_result["used_vagal"] if act_result else False,
                 "model_variant": act_result.get("model_variant") if act_result else None,
+                "hr_std": round(hr_std_val, 1) if hr_std_val is not None else None,
+                "d_hr_mean": round(d_hr_mean, 1) if d_hr_mean is not None else None,
+                "d_hr_std": round(d_hr_std, 1) if d_hr_std is not None else None,
+                "d_rmssd": round(d_rmssd, 1) if d_rmssd is not None else None,
                 "state_description": state_desc,
                 "calm_zone_s": calm_zone_s,
                 "speech_fraction": round(speech_fraction_slow, 2),

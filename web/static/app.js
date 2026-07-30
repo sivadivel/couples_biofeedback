@@ -28,6 +28,7 @@ function emptyPartner(name) {
   return {
     name, sensorOnline: false, baselineSet: false,
     mean_hr: null, rmssd: null, hf: null, coherence: null, resp_rate: null,
+    hr_std: null, d_hr_mean: null, d_hr_std: null, d_rmssd: null,
     activation: null, direction: null, flooded: false, calm_zone_s: 0,
     trace_activation: [],
   };
@@ -224,6 +225,10 @@ function handleMessage(data) {
         state[p].hf = data.hf;
         state[p].coherence = data.coherence;
         state[p].resp_rate = data.resp_rate;
+        state[p].hr_std = data.hr_std;
+        state[p].d_hr_mean = data.d_hr_mean;
+        state[p].d_hr_std = data.d_hr_std;
+        state[p].d_rmssd = data.d_rmssd;
         state[p].activation = data.activation;
         state[p].direction = data.direction;
         if (data.trace_activation) state[p].trace_activation = data.trace_activation;
@@ -288,11 +293,21 @@ function setText(id, value) {
   if (el) el.textContent = value;
 }
 
+// Signed delta-from-baseline text for a tile's sub-line, e.g. "+9" / "-3.1".
+function formatDelta(v, decimals) {
+  if (v == null) return "—";
+  const s = v.toFixed(decimals);
+  return v > 0 ? `+${s}` : s;
+}
+
 function renderTiles(p) {
   const s = state[p];
   setText(`hr-${p}`, s.mean_hr != null ? Math.round(s.mean_hr) : "—");
+  setText(`hr-delta-${p}`, formatDelta(s.d_hr_mean, 0));
+  setText(`hrstd-${p}`, s.hr_std != null ? s.hr_std.toFixed(1) : "—");
+  setText(`hrstd-delta-${p}`, formatDelta(s.d_hr_std, 1));
   setText(`rmssd-${p}`, s.rmssd != null ? Math.round(s.rmssd) : "—");
-  setText(`coh-${p}`, s.coherence != null ? s.coherence.toFixed(2) : "—");
+  setText(`rmssd-delta-${p}`, formatDelta(s.d_rmssd, 0));
   setText(`resp-${p}`, s.resp_rate != null ? Math.round(s.resp_rate) : "—");
 }
 
